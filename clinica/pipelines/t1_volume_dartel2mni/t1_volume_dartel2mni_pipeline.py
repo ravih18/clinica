@@ -37,7 +37,7 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
         Returns:
             A list of (string) input fields name.
         """
-        return ["native_segmentations", "flowfield_files", "template_file"]
+        return ["native_t1w", "native_segmentations", "flowfield_files", "template_file"]
 
     def get_output_fields(self):
         """Specify the list of possible outputs of this pipeline.
@@ -60,6 +60,7 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
             t1_volume_deformation_to_template,
             t1_volume_final_group_template,
             t1_volume_native_tpm,
+            T1W_NII
         )
         from clinica.utils.inputs import clinica_file_reader, clinica_group_reader
         from clinica.utils.stream import cprint
@@ -88,6 +89,7 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
             ),
         )
 
+        
         # Segmented Tissues
         # =================
         tissues_input = []
@@ -105,7 +107,17 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
         # Tissues_input has a length of len(self.parameters['mask_tissues']). Each of these elements has a size of
         # len(self.subjects). We want the opposite : a list of size len(self.subjects) whose elements have a size of
         # len(self.parameters['mask_tissues']. The trick is to iter on elements with zip(*my_list)
-        tissues_input_rearranged = []
+        # T1w file
+        try:
+            native_t1w = clinica_file_reader(
+                    self.subjects,
+                    self.sessions,
+                    self.bids_directory,
+                    T1W_NII,
+            )
+        except ClinicaException as e:
+            all_errors.append(e)
+        tissues_input_rearranged = [native_t1w]
         for subject_tissue_list in zip(*tissues_input):
             tissues_input_rearranged.append(subject_tissue_list)
 
@@ -181,6 +193,7 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
             for i in range(len(self.subjects))
         ]
         write_normalized_node.inputs.regexp_substitutions = [
+            (r"(.*)(sub-.*)_T1w\.nii\.gz?)$", r"\1\2_T1w_space-Ixi549Space_T1w\.nii\.gz\3"),
             (r"(.*)c1(sub-.*)(\.nii(\.gz)?)$", r"\1\2_segm-graymatter_probability\3"),
             (r"(.*)c2(sub-.*)(\.nii(\.gz)?)$", r"\1\2_segm-whitematter_probability\3"),
             (r"(.*)c3(sub-.*)(\.nii(\.gz)?)$", r"\1\2_segm-csf_probability\3"),
