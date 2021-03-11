@@ -195,7 +195,7 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
             for i in range(len(self.subjects))
         ]
         write_normalized_node.inputs.regexp_substitutions = [
-            (r"(.*)mw(sub-.*)_T1w(\.nii(\.gz)?)$", r"\1\2_T1w_space-Ixi549Space_T1w\.nii\.gz\3"),
+            (r"(.*)mw(sub-.*)_T1w(\.nii(\.gz)?)$", r"\1\2_T1w_space-Ixi549Space_T1w\3"),
             (r"(.*)c1(sub-.*)(\.nii(\.gz)?)$", r"\1\2_segm-graymatter_probability\3"),
             (r"(.*)c2(sub-.*)(\.nii(\.gz)?)$", r"\1\2_segm-whitematter_probability\3"),
             (r"(.*)c3(sub-.*)(\.nii(\.gz)?)$", r"\1\2_segm-csf_probability\3"),
