@@ -117,7 +117,9 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
             )
         except ClinicaException as e:
             all_errors.append(e)
-        tissues_input_rearranged = [native_t1w]
+        tissues_input.append(native_t1w)
+
+        tissues_input_rearranged = []
         for subject_tissue_list in zip(*tissues_input):
             tissues_input_rearranged.append(subject_tissue_list)
 
