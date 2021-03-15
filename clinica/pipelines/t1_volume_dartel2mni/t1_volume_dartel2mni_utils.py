@@ -11,3 +11,7 @@ def join_smoothed_files(smoothed_normalized_files):
         [x for smooth in subject for x in smooth]
         for subject in zip(*smoothed_normalized_files)
     ]
+
+def concatenate_normalized_files(normalized_tissues_files, normalized_t1w_files):
+    """Concatenate normalized t1w and tissues outputs"""
+    return normalized_tissues_files.extend(normalized_t1w_files)

@@ -109,7 +109,7 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
         # len(self.parameters['mask_tissues']. The trick is to iter on elements with zip(*my_list)
         # T1w file
         try:
-            native_t1w = clinica_file_reader(
+            native_t1w_input = clinica_file_reader(
                     self.subjects,
                     self.sessions,
                     self.bids_directory,
@@ -117,7 +117,7 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
             )
         except ClinicaException as e:
             all_errors.append(e)
-        tissues_input.append(native_t1w)
+        read_input_node.inputs.native_t1w = native_t1w_input
 
         tissues_input_rearranged = []
         for subject_tissue_list in zip(*tissues_input):
@@ -160,7 +160,8 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
         # fmt: off
         self.connect(
             [
-                (read_input_node, self.input_node, [("native_segmentations", "native_segmentations"),
+                (read_input_node, self.input_node, [("native_t1w", "native_t1w"), 
+                                                    ("native_segmentations", "native_segmentations"),
                                                     ("flowfield_files", "flowfield_files"),
                                                     ("template_file", "template_file")]),
             ]
@@ -256,6 +257,13 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
             name="unzip_tissues_node",
             iterfield=["in_file"],
         )
+        unzip_t1w_node = npe.MapNode(
+            nutil.Function(
+                input_names=["in_file"], output_names=["out_file"], function=unzip_nii
+            ),
+            name="unzip_tissues_node",
+            iterfield=["in_file"],
+        )
         unzip_flowfields_node = npe.MapNode(
             nutil.Function(
                 input_names=["in_file"], output_names=["out_file"], function=unzip_nii
@@ -272,15 +280,32 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
 
         # DARTEL2MNI Registration
         # =======================
-        dartel2mni_node = npe.MapNode(
+        dartel2mni_tissues_node = npe.MapNode(
             spm.DARTELNorm2MNI(),
-            name="dartel2MNI",
+            name="dartel2MNITissues",
             iterfield=["apply_to_files", "flowfield_files"],
         )
         if self.parameters["voxel_size"] is not None:
-            dartel2mni_node.inputs.voxel_size = tuple(self.parameters["voxel_size"])
-        dartel2mni_node.inputs.modulate = self.parameters["modulate"]
-        dartel2mni_node.inputs.fwhm = 0
+            dartel2mni_tissues_node.inputs.voxel_size = tuple(self.parameters["voxel_size"])
+        dartel2mni_tissues_node.inputs.modulate = self.parameters["modulate"]
+        dartel2mni_tissues_node.inputs.fwhm = 0
+
+        dartel2mni_t1w_node = npe.MapNode(
+            spm.DARTELNorm2MNI(),
+            name="dartel2MNIT1W",
+            iterfield=["apply_to_files", "flowfield_files"],
+        )
+
+        # Concatenate tissues and t1w
+        # ===========================
+        concatenate_node = npe.Node(
+            interface=nutil.Function(
+                input_names=["normalized_tissues_files", "normalized_t1w_files"],
+                output_names=["normalized_files"],
+                function=dartel2mni_utils.concatenate_normalized_files,
+            ),
+            name="concatenateNormalizedFiles",
+        )
 
         # Smoothing
         # =========
@@ -311,7 +336,7 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
             # fmt: off
             self.connect(
                 [
-                    (dartel2mni_node, smoothing_node, [("normalized_files", "in_files")]),
+                    (dartel2mni_tissues_node, smoothing_node, [("normalized_files", "in_files")]),
                     (smoothing_node, join_smoothing_node, [("smoothed_files", "smoothed_normalized_files")]),
                     (join_smoothing_node, self.output_node, [("smoothed_normalized_files", "smoothed_normalized_files")]),
                 ]
@@ -326,13 +351,19 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
         self.connect(
             [
                 (self.input_node, unzip_tissues_node, [("native_segmentations", "in_file")]),
+                (self.input_node, unzip_t1w_node, [("native_t1w", "in_file")]),
                 (self.input_node, unzip_flowfields_node, [("flowfield_files", "in_file")]),
                 (self.input_node, unzip_template_node, [("template_file", "in_file")]),
-                (unzip_tissues_node, dartel2mni_node, [("out_file", "apply_to_files")]),
-                (unzip_flowfields_node, dartel2mni_node, [
+                (unzip_tissues_node, dartel2mni_tissues_node, [("out_file", "apply_to_files")]),
+                (unzip_flowfields_node, dartel2mni_tissues_node, [
                     (("out_file", dartel2mni_utils.prepare_flowfields, self.parameters["tissues"]), "flowfield_files")]),
-                (unzip_template_node, dartel2mni_node, [("out_file", "template_file")]),
-                (dartel2mni_node, self.output_node, [("normalized_files", "normalized_files")]),
+                (unzip_template_node, dartel2mni_tissues_node, [("out_file", "template_file")]),
+                (unzip_t1w_node, dartel2mni_t1w_node, [("out_file", "apply_to_files")]),
+                (unzip_flowfields_node, dartel2mni_t1w_node, [("out_file", "flowfield_files")]),
+                (unzip_template_node, dartel2mni_t1w_node, [("out_file", "template_file")]),
+                (dartel2mni_tissues_node, concatenate_node, [("normalized_files", "normalized_tissues_files")]),
+                (dartel2mni_t1w_node, concatenate_node, [("normalized_files", "normalized_t1w_files")]),
+                (concatenate_node, self.output_node, [("normalized_files", "normalized_files")]),
             ]
         )
         # fmt: on
