@@ -261,7 +261,7 @@ class T1VolumeDartel2MNI(cpe.Pipeline):
             nutil.Function(
                 input_names=["in_file"], output_names=["out_file"], function=unzip_nii
             ),
-            name="unzip_tissues_node",
+            name="unzip_t1w_node",
             iterfield=["in_file"],
         )
         unzip_flowfields_node = npe.MapNode(
