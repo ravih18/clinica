@@ -2,7 +2,7 @@
 
 
 def prepare_flowfields(flow_fields, tissues):
-    return [[f] * (len(tissues) + 1) for f in flow_fields]
+    return [[f] * len(tissues) for f in flow_fields]
 
 
 def join_smoothed_files(smoothed_normalized_files):
