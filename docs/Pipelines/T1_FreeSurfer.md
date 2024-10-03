@@ -5,10 +5,8 @@ This pipeline performs cortical surface extraction, segmentation of subcortical 
 Additionally, from the FreeSurfer outputs, we generate TSV files containing a summary of the regional statistics (e.g. regional volume, mean cortical thickness) to ease subsequent statistical analysis.
 
 ## Dependencies
-<!-- If you installed the docker image of Clinica, nothing is required. -->
-If you only installed the core of Clinica, this pipeline needs the installation of
-**FreeSurfer 6.0** on your computer.
-You can find how to install this software on the [third-party](../../Third-party) page.
+
+If you only installed the core of Clinica, this pipeline needs the installation of [FreeSurfer 6.0](../Software/Third-party.md#freesurfer) on your computer.
 
 ## Running the pipeline
 
@@ -24,6 +22,10 @@ where:
 - `CAPS_DIRECTORY` is the output folder containing the results in a [CAPS](../../CAPS/Introduction) hierarchy.
 
 If you want to run the pipeline on a subset of your BIDS dataset, you can use the `-tsv` flag to specify in a TSV file the participants belonging to your subset.
+
+It is possible to specify the name of the CAPS dataset that will be created to store the outputs of the pipeline. This works if this CAPS dataset does not exist yet, otherwise the existing name will be kept.
+This can be achieved with the `--caps-name` option. The provided name will appear in the `dataset_description.json` file, at the root of the CAPS folder (see [CAPS Specifications](../CAPS/Specifications.md#the-dataset_descriptionjson-file) for more details).
+
 
 !!! note
     The computational time for one subject is around 10–15 hours depending on your CPU and the quality of your input T1.
@@ -62,7 +64,7 @@ More details regarding the `recon-all` output files can be found on the [FreeSur
 TSV files summarizing the regional statistics are also created for each subject.
 
 !!! note
-    The full list of features extracted from the FreeSurfer pipeline can be found in the [The ClinicA Processed Structure (CAPS) specifications](../../CAPS/Specifications/#t1-freesurfer-freesurfer-based-processing-of-t1-weighted-mr-images).
+    The full list of features extracted from the FreeSurfer pipeline can be found in [The ClinicA Processed Structure (CAPS) specifications](../../CAPS/Specifications/#t1-freesurfer-freesurfer-based-processing-of-t1-weighted-mr-images).
 
 <!-- ## Visualization of the results
 

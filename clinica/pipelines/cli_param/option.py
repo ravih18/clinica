@@ -2,14 +2,30 @@
 
 import click
 
-from clinica.utils.pet import LIST_SUVR_REFERENCE_REGIONS
+from clinica.utils.pet import ReconstructionMethod, SUVRReferenceRegion, Tracer
 
 from .option_group import option
 
 acq_label = option(
     "-acq",
     "--acq_label",
-    help="Name of the label given to the PET acquisition, specifying the tracer used (acq-<acq_label>).",
+    type=click.Choice(Tracer),
+    help=(
+        "Name of the label given to the PET acquisition, "
+        "specifying the tracer used (acq-<acq_label>)."
+    ),
+)
+
+caps_name = option(
+    "-cn",
+    "--caps-name",
+    type=str,
+    help=(
+        "The name of the CAPS dataset that will be created by the pipeline. "
+        "This is not the name of the folder itself, but the name in the metadata, "
+        "which can be different if desired. If the CAPS folder already exists and "
+        "already has a name, this will have no effect and the existing name will be kept."
+    ),
 )
 
 dartel_tissues = option(
@@ -52,12 +68,6 @@ modulate = option(
     help="Modulate output images, no modulation preserves concentrations.",
 )
 
-n_procs = option(
-    "-np",
-    "--n_procs",
-    type=int,
-    help="Number of cores used to run in parallel.",
-)
 
 overwrite_outputs = option(
     "-overwrite",
@@ -74,6 +84,23 @@ pvc_psf_tsv = option(
         "TSV file containing for each PET image its point spread function (PSF) measured "
         "in mm at x, y & z coordinates. Columns must contain: "
         "participant_id, session_id, acq_label, psf_x, psf_y and psf_z."
+    ),
+)
+
+random_seed = option(
+    "--random_seed",
+    type=int,
+    help="Specify the random seed for algorithms that support it.",
+)
+
+reconstruction_method = option(
+    "-rec",
+    "--reconstruction_method",
+    type=click.Choice(ReconstructionMethod),
+    help=(
+        "Select the PET scans based on the reconstruction method. "
+        "If unset, PET scans will be selected independently of the "
+        "reconstruction method."
     ),
 )
 
@@ -103,7 +130,7 @@ subjects_sessions_tsv = option(
 suvr_reference_region = option(
     "-suvr",
     "--suvr_reference_region",
-    type=click.Choice(LIST_SUVR_REFERENCE_REGIONS),
+    type=click.Choice(SUVRReferenceRegion),
     help=(
         "Intensity normalization using the average PET uptake in reference regions "
         "resulting in a standardized uptake value ratio (SUVR) map. It can be "
@@ -184,4 +211,12 @@ atlas_path = option(
     "--atlas_path",
     type=click.Path(exists=True, dir_okay=True, resolve_path=True),
     help="Compute atlases at the end of the path",
+)
+
+# This option is only implemented in dwi_preprocessing_using_t1 for now.
+delete_cache = option(
+    "-dc",
+    "--delete_cache",
+    is_flag=True,
+    help="If True, large intermediary files will be deleted before the end of the pipeline.",
 )

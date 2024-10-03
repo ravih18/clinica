@@ -4,6 +4,61 @@
 This page describes data handling tools provided by Clinica for [BIDS](http://bids.neuroimaging.io) and [CAPS](../CAPS/Introduction) compliant datasets.
 These tools provide easy interaction mechanisms with datasets, including generating subject lists or merging all tabular data into a single TSV for analysis with external statistical software tools.
 
+## `describe` - Describe a BIDS or CAPS dataset
+
+This tool describes a BIDS or CAPS dataset, basically parsing the `dataset_description.json` file and displaying the information in the console in a nice way.
+
+!!! note
+    This tool has been added in Clinica `0.9.0` and is not available in older versions.
+
+```shell
+clinica iotools describe DATASET_PATH
+```
+
+where:
+
+- `DATASET_PATH`: path to the BIDS or CAPS dataset to be described.
+
+**Examples:**
+
+With a BIDS dataset:
+
+```shell
+clinica iotools describe ./bids
+                         Dataset information
+╭───────────────────────────────┬──────┬─────────────────────────────╮
+│                          Name │ Type │ BIDS Specifications Version │
+├───────────────────────────────┼──────┼─────────────────────────────┤
+│ The mother of all experiments │  raw │ 1.6.0                       │
+╰───────────────────────────────┴──────┴─────────────────────────────╯
+```
+
+With a CAPS dataset:
+
+```shell
+clinica iotools describe ./caps
+                                               Dataset information
+╭──────────────────────────────────────┬────────────┬─────────────────────────────┬─────────────────────────────╮
+│                                 Name │       Type │ BIDS Specifications Version │ CAPS Specifications Version │
+├──────────────────────────────────────┼────────────┼─────────────────────────────┼─────────────────────────────┤
+│ 05c5794b-2d20-4217-b727-c215d079ab35 │ derivative │ 1.9.0                       │                       1.0.0 │
+╰──────────────────────────────────────┴────────────┴─────────────────────────────┴─────────────────────────────╯
+                                                                                           Processing information
+╭────────────────────────────┬────────────────────────────┬───────────────────┬─────────────────┬────────────────────────────────────────────┬────────────────┬────────────────────────────────────────────╮
+│                       Name │                       Date │            Author │         Machine │                                  InputPath │ ClinicaVersion │                               Dependencies │
+├────────────────────────────┼────────────────────────────┼───────────────────┼─────────────────┼────────────────────────────────────────────┼────────────────┼────────────────────────────────────────────┤
+│ dwi-preprocessing-using-t1 │ 2024-09-01 13:41:05.529799 │ nicolas.gensollen │ UMR-COLLI-MP050 │ /Users/nicolas.gensollen/dwi_datasets/bids │          0.9.0 │                Dependencies                │
+│                            │                            │                   │                 │                                            │                │ ╭───────────┬──────────────┬─────────────╮ │
+│                            │                            │                   │                 │                                            │                │ │      Name │ VersionCons… │ InstalledV… │ │
+│                            │                            │                   │                 │                                            │                │ ├───────────┼──────────────┼─────────────┤ │
+│                            │                            │                   │                 │                                            │                │ │      ants │      >=2.3.0 │       2.5.0 │ │
+│                            │                            │                   │                 │                                            │                │ │       fsl │      >=6.0.1 │       6.0.2 │ │
+│                            │                            │                   │                 │                                            │                │ │    mrtrix │      >=0.0.0 │       3.0.3 │ │
+│                            │                            │                   │                 │                                            │                │ │ convert3d │      >=0.0.0 │       1.0.0 │ │
+│                            │                            │                   │                 │                                            │                │ ╰───────────┴──────────────┴─────────────╯ │
+╰────────────────────────────┴────────────────────────────┴───────────────────┴─────────────────┴────────────────────────────────────────────┴────────────────┴────────────────────────────────────────────╯
+```
+
 ## `create-subjects-visits` - Generate the list all subjects and visits of a given dataset
 
 A TSV file with two columns (`participant_id` and `session_id`) containing the list of visits for each subject can be created as follows:
@@ -21,9 +76,9 @@ Here is an example of the file generated by this tool:
 
 ```text
 participant_id   session_id
-sub-01           ses-M00
-sub-02           ses-M24
-sub-03           ses-M24
+sub-01           ses-M000
+sub-02           ses-M024
+sub-03           ses-M024
 ...
 ```
 
@@ -62,10 +117,10 @@ If not specified the default value will be `missing_mods`
 
 If, for example, only the session M00 is available and the parameter `-op` is not specified, the command will create the files:
 
-- `missing_mods_ses-M00.tsv`
+- `missing_mods_ses-M000.tsv`
 - `missing_mods_summary.txt`.
 
-The content of `missing_mods_ses-M00.tsv` will look like:
+The content of `missing_mods_ses-M000.tsv` will look like:
 
 ```Text
 participant_id   T1w   DWI
@@ -107,9 +162,9 @@ The content of `output_file` will look like:
 
 ```Text
 participant_id   session_id     t1-linear   ...     pet-volume_trc-<tracer>_group-<group_label>_pvc-{True|False}
-sub-01           ses-M00        1                   1
-sub-01           ses-M12        1                   0
-sub-02           ses-M00        0                   0
+sub-01           ses-M000        1                   1
+sub-01           ses-M012        1                   0
+sub-02           ses-M000        0                   0
 ```
 
 - columns associated with `pet-volume` outputs will specify the PET tracer,
@@ -155,9 +210,9 @@ If an input list of subjects and sessions is given, the merged file will only ga
 
     ```Text
     participant_id   session_id   date_of_birth   ...   ..._ROI-0   ..._ROI-1  ...
-    sub-01           ses-M00      25/04/41        ...   9.824750    0.023562
-    sub-01           ses-M18      25/04/41        ...   8.865353    0.012349
-    sub-02           ses-M00      09/01/91        ...   9.586342    0.027254
+    sub-01           ses-M000      25/04/41        ...   9.824750    0.023562
+    sub-01           ses-M018      25/04/41        ...   8.865353    0.012349
+    sub-02           ses-M000      09/01/91        ...   9.586342    0.027254
     ...
     ```
 
@@ -207,12 +262,12 @@ Optional arguments:
     ```
 
     To know if a NIfTI image must be centered, the algorithm checks the filenames of the NIfTI images.
-    For example, regarding the file `bids/sub-01/ses-M0/anat/sub-01_ses-M0_T1w.nii`:
+    For example, regarding the file `bids/sub-01/ses-M000/anat/sub-01_ses-M000_T1w.nii`:
 
-     - The filename is `sub-01_ses-M0_T1w.nii`.
+     - The filename is `sub-01_ses-M000_T1w.nii`.
      - The algorithm tests (in a case insensitive way) if the string `18ffdg_pet` is in the filename: False.
      - The algorithm tests (in a case insensitive way) if the string `t1w` is in the filename: True!
-     - The algorithm tests if the volume has its center at more than 50 mm (Euclidian distance) from the origin: True.
+     - The algorithm tests if the volume has its center at more than 50 mm (Euclidean distance) from the origin: True.
      - This file will be centered by the algorithm.
 
      Understanding this, you can now center any modality you want! If your files are named following this pattern : `sub-X_ses-Y_magnitude1.nii.gz`, specify the modality as follows:`--modality "magnitude1"`.

@@ -26,11 +26,11 @@ not the [`t1-freesurfer`](../T1_FreeSurfer) pipeline.
 You need to have performed the [`t1-freesurfer-longitudinal`](../T1_FreeSurfer_Longitudinal) pipeline on your T1-weighted MR images.
 
 ## Dependencies
-<!-- If you installed the docker image of Clinica, nothing is required.-->
 
-If you only installed the core of Clinica, this pipeline needs the installation of
-**FreeSurfer 6.0**, **SPM12**, **FSL 6.0** and **PETPVC 1.2.4** (which depends on **ITK 4**) on your computer.
-You can find how to install these software packages on the [third-party](../../Third-party) page.
+If you only installed the core of Clinica, this pipeline needs the installation of [FreeSurfer 6.0](../Software/Third-party.md#freesurfer), [FSL 6.0](../Software/Third-party.md#fsl), and [PETPVC 1.2.4](../Software/Third-party.md#petpvc) (which depends on [ITK 4](../Software/Third-party.md#itk)) on your computer.
+
+In addition, you also need to either install [SPM12](../Software/Third-party.md#spm12) and [Matlab](../Software/Third-party.md#matlab), or [spm standalone](../Software/Third-party.md#spm12-standalone).
+
 
 ## Running the pipeline
 
@@ -87,19 +87,19 @@ To mitigate this issue, you can do the following:
     $ nipypecli crash crash-20210404-115414-sheldon.cooper-gtmseg-278e3a57-294f-4121-8a46-9975801f24aa.pklz
     [...]
     Abort
-    ERROR: mri_gtmseg --s sub-ADNI011S4105_ses-M00 --usf 2 --o gtmseg.mgz --apas apas+head.mgz --no-subseg-wm --no-keep-cc --no-keep-hypo
+    ERROR: mri_gtmseg --s sub-ADNI011S4105_ses-M000 --usf 2 --o gtmseg.mgz --apas apas+head.mgz --no-subseg-wm --no-keep-cc --no-keep-hypo
     gtmseg exited with errors
     Standard error:
-    Saving result to '<caps>/subjects/sub-ADNI011S4105/ses-M00/t1/freesurfer_cross_sectional/sub-ADNI011S4105_ses-M00/tmp/tmpdir.xcerebralseg.50819/tmpdir.fscalc.53505/tmp.mgh' (type = MGH )                       [ ok ]
-    Saving result to '<caps>/subjects/sub-ADNI011S4105/ses-M00/t1/freesurfer_cross_sectional/sub-ADNI011S4105_ses-M00/tmp/tmpdir.xcerebralseg.50819/tmpdir.fscalc.53727/tmp.mgh' (type = MGH )                       [ ok ]
-    Saving result to '<caps>/subjects/sub-ADNI011S4105/ses-M00/t1/freesurfer_cross_sectional/sub-ADNI011S4105_ses-M00/tmp/tmpdir.xcerebralseg.50819/tmpdir.fscalc.53946/tmp.mgh' (type = MGH )                       [ ok ]
+    Saving result to '<caps>/subjects/sub-ADNI011S4105/ses-M000/t1/freesurfer_cross_sectional/sub-ADNI011S4105_ses-M000/tmp/tmpdir.xcerebralseg.50819/tmpdir.fscalc.53505/tmp.mgh' (type = MGH )                       [ ok ]
+    Saving result to '<caps>/subjects/sub-ADNI011S4105/ses-M000/t1/freesurfer_cross_sectional/sub-ADNI011S4105_ses-M00/tmp/tmpdir.xcerebralseg.50819/tmpdir.fscalc.53727/tmp.mgh' (type = MGH )                       [ ok ]
+    Saving result to '<caps>/subjects/sub-ADNI011S4105/ses-M000/t1/freesurfer_cross_sectional/sub-ADNI011S4105_ses-M000/tmp/tmpdir.xcerebralseg.50819/tmpdir.fscalc.53946/tmp.mgh' (type = MGH )                       [ ok ]
     Return code: 1
     ```
 
     This is under investigation (see [Issue #119](https://github.com/aramis-lab/clinica/issues/119) for details) and will be solved as soon as possible.
 
 !!! warning "Case where several longitudinal IDs are present"
-    If a subject has more than two longitudinal IDs (e.g. `long-M00M18` and `long-M00M18M36`),
+    If a subject has more than two longitudinal IDs (e.g. `long-M000M018` and `long-M000M018M036`),
     Clinica is not currently able to deal with this particular case.
     This will be fixed in the future.
 
@@ -121,7 +121,7 @@ surface at equal distance between the white matter/gray matter interface and the
 TSV files summarizing the regional statistics on the labelled atlases (Desikan and Destrieux).
 
 !!! note
-    The full list of output files from the `pet-surface-longitudinal` pipeline can be found in the [The ClinicA Processed Structure (CAPS) specifications](../../CAPS/Specifications/#pet-surface-longitudinal-surface-based-longitudinal-processing-of-pet-images).
+    The full list of output files from the `pet-surface-longitudinal` pipeline can be found in [The ClinicA Processed Structure (CAPS) specifications](../../CAPS/Specifications/#pet-surface-longitudinal-surface-based-longitudinal-processing-of-pet-images).
 
 ## Describing this pipeline in your paper
 

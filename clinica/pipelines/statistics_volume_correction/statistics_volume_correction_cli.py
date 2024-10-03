@@ -2,14 +2,17 @@ from typing import Optional
 
 import click
 
+from clinica import option
 from clinica.pipelines import cli_param
+from clinica.pipelines.engine import clinica_pipeline
 
 pipeline_name = "statistics-volume-correction"
 
 
+@clinica_pipeline
 @click.command(name=pipeline_name)
 @cli_param.argument.caps_directory
-@click.argument("t_map", type=click.Path(exists=True, resolve_path=True))
+@click.argument("t_map", type=str)
 @click.argument("height_threshold", type=float)
 @click.argument("FWEp", type=float)
 @click.argument("FDRp", type=float)
@@ -25,7 +28,8 @@ pipeline_name = "statistics-volume-correction"
 )
 @cli_param.option_group.common_pipelines_options
 @cli_param.option.working_directory
-@cli_param.option.n_procs
+@option.global_option_group
+@option.n_procs
 def cli(
     caps_directory: str,
     t_map: str,

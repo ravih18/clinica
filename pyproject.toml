@@ -1,10 +1,10 @@
 [tool.poetry]
 name = "clinica"
-version = "0.7.1"
+version = "0.9.1"
 description = "Software platform for clinical neuroimaging studies"
 license = "MIT"
 authors = ["ARAMIS Lab"]
-maintainers = ["Clinica developers <clinica-user@inria.fr>"]
+maintainers = ["Clinica developers <clinica.run@gmail.com>"]
 readme = "README.md"
 homepage = "https://www.clinica.run"
 repository = "https://github.com/aramis-lab/clinica.git"
@@ -27,52 +27,60 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.11"
-nibabel = "^2.3.3"
-nipype = "^1.7.1"
+python = ">=3.9,<3.13"
+nibabel = "^5"
+nipype = ">=1.8.6"
 argcomplete = "^1.9.4"
-pandas = "^1.2"
+pandas = "^2"
 jinja2 = "^3"
 xvfbwrapper = "*"
-numpy = "^1.17"
+numpy = "^2"
 scikit-learn = "^1.0"
-nilearn = "^0.7.0"
+nilearn = "^0.10.3"
 colorlog = "^5"
 xgboost = "*"
-scipy = "^1.7"
+scipy = "^1.12"
 matplotlib = "*"
-niflow-nipype1-workflows = "*"
-scikit-image = "^0.19"
+scikit-image = "*"
 pydicom = "*"
-networkx = "*"
+networkx = "^2"
 click = "^8"
 click-option-group = "^0.5"
 xlrd = "*"
 openpyxl = "*"
 fsspec = "*"
-# docs
-mkdocs = {version = "^1.1", optional = true}
-mkdocs-material = {version = ">=7.1.8", optional= true}
-pymdown-extensions = {version = "*", optional = true}
+pydra-nipype1 = "^0.2"
+pydra = "^0.22"
+pybids = "^0.16"
+joblib = "^1.2.0"
 attrs = ">=20.1.0"
-cattrs = "^1.9.0"
+cattrs = "*"
+pydra-bids = "^0.0.10"
+pydra-freesurfer = "^0.0.9"
+pydra-petpvc="^0.0.4"
+pydra-fsl = "^0.0.22"
+antspyx = "^0.4.2"
+rich = "^13.8.0"
 
-[tool.poetry.dev-dependencies]
-black = "*"
-isort = "*"
-pre-commit = "*"
+[tool.poetry.group.dev.dependencies]
 pytest = "*"
+pytest-cov = "*"
+pytest-mock = "*"
+pytest-random-order = "*"
 pytest-timeout = "*"
 pytest-xdist = "*"
-pytest-cov = "^3.0.0"
-nipy = "^0.5.0"
 
-[tool.poetry.extras]
-docs = [
-    "mkdocs",
-    "mkdocs-material",
-    "pymdown-extensions"
-]
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "^1.1"
+mkdocs-material = ">=7.1.8"
+pymdown-extensions = "*"
+
+
+[tool.poetry.group.optional.dependencies]
+brainstat = "^0.4.2"
 
 [tool.poetry.scripts]
 clinica = "clinica.cmdline:main"
@@ -81,27 +89,30 @@ clinica = "clinica.cmdline:main"
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.black]
+[tool.ruff]
+target-version = "py38"
 line-length = 88
-target-version = ['py36', 'py37', 'py38']
-include = '\.pyi?$'
-force-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | \.pytest_cache
-  | _build
-  | buck-out
-  | build
-  | dist
-  | docs
-  | clinica/lib
-)/
-'''
 
-[tool.isort]
-profile = "black"
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "I001",
+#    "PTH",
+]
+ignore = ["E203", "E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["clinica"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.codespell]
+summary = ''
+skip = ".git,LICENSE.txt,ignore_words.txt,*.m"
+quiet-level = 3
+ignore-words = "ignore_words.txt"

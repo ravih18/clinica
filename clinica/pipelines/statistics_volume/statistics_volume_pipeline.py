@@ -1,14 +1,17 @@
-import clinica.pipelines.engine as cpe
+from typing import List
+
+from clinica.pipelines.engine import Pipeline
+from clinica.utils.pet import SUVRReferenceRegion, Tracer
 
 
-class StatisticsVolume(cpe.Pipeline):
+class StatisticsVolume(Pipeline):
     """StatisticsVolume - Volume-based mass-univariate analysis with SPM.
 
     Returns:
         A clinica pipeline object containing the StatisticsVolume pipeline.
     """
 
-    def check_pipeline_parameters(self):
+    def _check_pipeline_parameters(self) -> None:
         """Check pipeline parameters."""
         from clinica.utils.exceptions import ClinicaException
         from clinica.utils.group import check_group_label
@@ -16,12 +19,10 @@ class StatisticsVolume(cpe.Pipeline):
         # Clinica compulsory parameters
         self.parameters.setdefault("group_label", None)
         check_group_label(self.parameters["group_label"])
-
         if "orig_input_data_volume" not in self.parameters.keys():
             raise KeyError(
                 "Missing compulsory orig_input_data_volume key in pipeline parameter."
             )
-
         if "contrast" not in self.parameters.keys():
             raise KeyError("Missing compulsory contrast key in pipeline parameter.")
 
@@ -31,7 +32,13 @@ class StatisticsVolume(cpe.Pipeline):
 
         # Optional parameters for inputs from pet-volume pipeline
         self.parameters.setdefault("acq_label", None)
+        if self.parameters["acq_label"]:
+            self.parameters["acq_label"] = Tracer(self.parameters["acq_label"])
         self.parameters.setdefault("suvr_reference_region", None)
+        if self.parameters["suvr_reference_region"]:
+            self.parameters["suvr_reference_region"] = SUVRReferenceRegion(
+                self.parameters["suvr_reference_region"]
+            )
         self.parameters.setdefault("use_pvc_data", False)
 
         # Optional parameters for custom pipeline
@@ -50,21 +57,26 @@ class StatisticsVolume(cpe.Pipeline):
                 "(given value: %s)." % self.parameters["cluster_threshold"]
             )
 
-    def check_custom_dependencies(self):
+    def _check_custom_dependencies(self) -> None:
         """Check dependencies that can not be listed in the `info.json` file."""
+        pass
 
-    def get_input_fields(self):
+    def get_input_fields(self) -> List[str]:
         """Specify the list of possible inputs of this pipeline.
 
-        Returns:
+        Returns
+        -------
+        list of str :
             A list of (string) input fields name.
         """
         return ["input_files"]
 
-    def get_output_fields(self):
+    def get_output_fields(self) -> List[str]:
         """Specify the list of possible outputs of this pipeline.
 
-        Returns:
+        Returns
+        -------
+        list of str :
             A list of (string) output fields name.
         """
         return [
@@ -78,7 +90,7 @@ class StatisticsVolume(cpe.Pipeline):
             "contrast",
         ]
 
-    def build_input_node(self):
+    def _build_input_node(self):
         """Build and connect an input node to the pipeline."""
         import nipype.interfaces.utility as nutil
         import nipype.pipeline.engine as npe
@@ -88,11 +100,10 @@ class StatisticsVolume(cpe.Pipeline):
             pet_volume_normalized_suvr_pet,
             t1_volume_template_tpm_in_mni,
         )
-        from clinica.utils.inputs import clinica_file_reader
+        from clinica.utils.inputs import clinica_file_filter
         from clinica.utils.stream import cprint
         from clinica.utils.ux import print_begin_image, print_images_to_process
 
-        all_errors = []
         if self.parameters["orig_input_data_volume"] == "pet-volume":
             if not (
                 self.parameters["acq_label"]
@@ -100,12 +111,12 @@ class StatisticsVolume(cpe.Pipeline):
             ):
                 raise ValueError(
                     f"Missing value(s) in parameters from pet-volume pipeline. Given values:\n"
-                    f"- acq_label: {self.parameters['acq_label']}\n"
-                    f"- suvr_reference_region: {self.parameters['suvr_reference_region']}\n"
+                    f"- acq_label: {self.parameters['acq_label'].value}\n"
+                    f"- suvr_reference_region: {self.parameters['suvr_reference_region'].value}\n"
                     f"- use_pvc_data: {self.parameters['use_pvc_data']}\n"
                 )
 
-            self.parameters["measure_label"] = self.parameters["acq_label"]
+            self.parameters["measure_label"] = self.parameters["acq_label"].value
             information_dict = pet_volume_normalized_suvr_pet(
                 acq_label=self.parameters["acq_label"],
                 group_label=self.parameters["group_label_dartel"],
@@ -117,7 +128,10 @@ class StatisticsVolume(cpe.Pipeline):
         elif self.parameters["orig_input_data_volume"] == "t1-volume":
             self.parameters["measure_label"] = "graymatter"
             information_dict = t1_volume_template_tpm_in_mni(
-                self.parameters["group_label_dartel"], 1, True
+                group_label=self.parameters["group_label_dartel"],
+                tissue_number=1,
+                modulation=True,
+                fwhm=self.parameters["full_width_at_half_maximum"],
             )
 
         elif self.parameters["orig_input_data_volume"] == "custom-pipeline":
@@ -136,18 +150,9 @@ class StatisticsVolume(cpe.Pipeline):
                 f"Input data {self.parameters['orig_input_data_volume']} unknown."
             )
 
-        try:
-            input_files, _ = clinica_file_reader(
-                self.subjects, self.sessions, self.caps_directory, information_dict
-            )
-        except ClinicaException as e:
-            all_errors.append(e)
-
-        if len(all_errors) > 0:
-            error_message = "Clinica faced errors while trying to read files in your CAPS directories.\n"
-            for msg in all_errors:
-                error_message += str(msg)
-            raise ClinicaException(error_message)
+        input_files, self.subjects, self.sessions = clinica_file_filter(
+            self.subjects, self.sessions, self.caps_directory, information_dict
+        )
 
         read_parameters_node = npe.Node(
             name="LoadingCLIArguments",
@@ -169,128 +174,141 @@ class StatisticsVolume(cpe.Pipeline):
             [(read_parameters_node, self.input_node, [("input_files", "input_files")])]
         )
 
-    def build_output_node(self):
+    def _build_output_node(self):
         """Build and connect an output node to the pipeline."""
-        from os.path import join, pardir
+        from os.path import pardir
 
         import nipype.interfaces.io as nio
         import nipype.pipeline.engine as npe
 
-        relative_path = join(
-            "groups",
-            "group-" + self.parameters["group_label"],
-            "statistics_volume",
-            "group_comparison_measure-" + self.parameters["measure_label"],
+        base_dir = (
+            self.caps_directory
+            / "groups"
+            / f"group-{self.parameters['group_label']}"
+            / "statistics_volume"
+            / f"group_comparison_measure-{self.parameters['measure_label']}"
         )
 
         datasink = npe.Node(nio.DataSink(), name="sinker")
-        datasink.inputs.base_directory = join(self.caps_directory, relative_path)
+        datasink.inputs.base_directory = str(base_dir)
 
         datasink.inputs.parameterization = True
         if self.parameters["full_width_at_half_maximum"]:
             datasink.inputs.regexp_substitutions = [
                 # t-stat map
                 (
-                    join(self.caps_directory, relative_path)
-                    + r"/spm_results_analysis_./(.*)",
-                    join(self.caps_directory, relative_path) + r"/\1",
+                    str(base_dir) + r"/spm_results_analysis_./(.*)",
+                    str(base_dir) + r"/\1",
                 ),
                 # contrasts
                 (
-                    join(self.caps_directory, relative_path) + r"/contrasts/(.*)",
-                    join(self.caps_directory, relative_path) + r"/\1",
+                    str(base_dir) + r"/contrasts/(.*)",
+                    str(base_dir) + r"/\1",
                 ),
                 # resels per voxels
                 (
-                    join(self.caps_directory, relative_path)
-                    + "/resels_per_voxels/resels_per_voxel.nii",
-                    join(self.caps_directory, relative_path)
-                    + "/group-"
-                    + self.parameters["group_label"]
-                    + "_RPV.nii",
+                    str(base_dir / "resels_per_voxels" / "resels_per_voxel.nii"),
+                    str(base_dir / f"group-{self.parameters['group_label']}_RPV.nii"),
                 ),
                 # mask
                 (
-                    join(self.caps_directory, relative_path)
-                    + "/mask/included_voxel_mask.nii",
-                    join(self.caps_directory, relative_path)
-                    + "/group-"
-                    + self.parameters["group_label"]
-                    + "_mask.nii",
+                    str(base_dir / "mask " / "included_voxel_mask.nii"),
+                    str(base_dir / f"group-{self.parameters['group_label']}_mask.nii"),
                 ),
                 # variance of error
                 (
-                    join(self.caps_directory, relative_path)
-                    + "/variance_of_error/(.*)",
-                    join(self.caps_directory, relative_path) + r"/\1",
+                    str(base_dir / "variance_of_error") + r"/(.*)",
+                    str(base_dir) + r"/\1",
                 ),
                 # tsv file
                 (
-                    join(self.caps_directory, relative_path) + r"/tsv_file/.*",
-                    join(self.caps_directory, relative_path)
-                    + "/"
-                    + pardir
-                    + "/group-"
-                    + self.parameters["group_label"]
-                    + "_participants.tsv",
+                    str(base_dir / "tsv_file") + r"/.*",
+                    str(
+                        base_dir
+                        / pardir
+                        / f"group-{self.parameters['group_label']}_participants.tsv"
+                    ),
                 ),
                 # report (figures)
                 (
-                    join(self.caps_directory, relative_path) + r"/figures/(.*)",
-                    join(self.caps_directory, relative_path) + r"/\1",
+                    str(base_dir / "figures") + r"/(.*)",
+                    str(base_dir) + r"/\1",
                 ),
                 # regression coefficient
                 (
-                    join(self.caps_directory, relative_path)
-                    + r"/regression_coeff/(.*).nii",
-                    join(self.caps_directory, relative_path)
-                    + "/group-"
-                    + self.parameters["group_label"]
-                    + r"_covariate-\1"
-                    + "_measure-"
-                    + self.parameters["measure_label"]
-                    + "_fwhm-"
-                    + str(self.parameters["full_width_at_half_maximum"])
-                    + "_regressionCoefficient.nii",
+                    str(base_dir / "regression_coeff") + r"/(.*).nii",
+                    (
+                        str(base_dir / f"group-{self.parameters['group_label']}")
+                        + r"_covariate-\1"
+                        + f"_measure-{self.parameters['measure_label']}_fwhm-{self.parameters['full_width_at_half_maximum']}_regressionCoefficient.nii"
+                    ),
                 ),
             ]
 
-        datasink.inputs.tsv_file = self.tsv_file
+        datasink.inputs.tsv_file = str(self.tsv_file)
 
-        # fmt: off
         self.connect(
             [
                 (self.output_node, datasink, [("spmT_0001", "spm_results_analysis_1")]),
                 (self.output_node, datasink, [("spmT_0002", "spm_results_analysis_2")]),
                 (self.output_node, datasink, [("spm_figures", "figures")]),
-                (self.output_node, datasink, [("variance_of_error", "variance_of_error")]),
-                (self.output_node, datasink, [("resels_per_voxels", "resels_per_voxels")]),
+                (
+                    self.output_node,
+                    datasink,
+                    [("variance_of_error", "variance_of_error")],
+                ),
+                (
+                    self.output_node,
+                    datasink,
+                    [("resels_per_voxels", "resels_per_voxels")],
+                ),
                 (self.output_node, datasink, [("mask", "mask")]),
-                (self.output_node, datasink, [("regression_coeff", "regression_coeff")]),
+                (
+                    self.output_node,
+                    datasink,
+                    [("regression_coeff", "regression_coeff")],
+                ),
                 (self.output_node, datasink, [("contrasts", "contrasts")]),
             ]
         )
-        # fmt: on
 
-    def build_core_nodes(self):
+    def _build_core_nodes(self):
         """Build and connect the core nodes of the pipeline."""
         from os.path import dirname, join
 
         import nipype.interfaces.utility as nutil
         import nipype.pipeline.engine as npe
-        from nipype.algorithms.misc import Gunzip
 
-        import clinica.pipelines.statistics_volume.statistics_volume_utils as utils
+        from clinica.pipelines.statistics_volume.statistics_volume_utils import (
+            clean_spm_contrast_file,
+            clean_spm_result_file,
+            clean_template_file,
+            copy_and_rename_spm_output_files,
+            get_group_1_and_2,
+            run_m_script,
+            write_matlab_model,
+        )
+        from clinica.utils.filemanip import unzip_nii
+
+        def _getter(files: list, idx: int) -> str:
+            return files[idx]
 
         # SPM cannot handle zipped files
-        unzip_node = npe.Node(interface=Gunzip(), name="unzip_node")
+        unzip_node = npe.Node(
+            nutil.Function(
+                input_names=["in_file"],
+                output_names=["output_files"],
+                function=unzip_nii,
+            ),
+            name="unzip_node",
+        )
 
         # Get indexes of the 2 groups, based on the contrast column of the tsv file
         get_groups = npe.Node(
             nutil.Function(
                 input_names=["tsv", "contrast"],
                 output_names=["idx_group1", "idx_group2", "class_names"],
-                function=utils.get_group_1_and_2,
+                function=get_group_1_and_2,
             ),
             name="get_groups",
         )
@@ -303,7 +321,7 @@ class StatisticsVolume(cpe.Pipeline):
             nutil.Function(
                 input_names=["m_file"],
                 output_names=["spm_mat"],
-                function=utils.run_m_script,
+                function=run_m_script,
             ),
             name="run_spm_script_node",
         )
@@ -341,7 +359,7 @@ class StatisticsVolume(cpe.Pipeline):
                     "template_file",
                 ],
                 output_names=["script_file", "covariates"],
-                function=utils.model_creation,
+                function=write_matlab_model,
             ),
             name="model_creation",
             overwrite=True,
@@ -357,7 +375,7 @@ class StatisticsVolume(cpe.Pipeline):
             nutil.Function(
                 input_names=["mat_file", "template_file"],
                 output_names=["script_file"],
-                function=utils.estimate,
+                function=clean_template_file,
             ),
             name="model_estimation",
         )
@@ -370,7 +388,7 @@ class StatisticsVolume(cpe.Pipeline):
             nutil.Function(
                 input_names=["mat_file", "template_file", "covariates", "class_names"],
                 output_names=["script_file"],
-                function=utils.contrast,
+                function=clean_spm_contrast_file,
             ),
             name="model_contrast",
         )
@@ -383,7 +401,7 @@ class StatisticsVolume(cpe.Pipeline):
             nutil.Function(
                 input_names=["mat_file", "template_file", "method", "threshold"],
                 output_names=["script_file"],
-                function=utils.results,
+                function=clean_spm_result_file,
             ),
             name="model_result_no_correction",
         )
@@ -410,16 +428,13 @@ class StatisticsVolume(cpe.Pipeline):
                     "measure",
                 ],
                 output_names=[
-                    "spmT_0001",
-                    "spmT_0002",
+                    "spm_T_maps",
                     "spm_figures",
-                    "variance_of_error",
-                    "resels_per_voxels",
-                    "mask",
+                    "other_spm_files",
                     "regression_coeff",
                     "contrasts",
                 ],
-                function=utils.read_output,
+                function=copy_and_rename_spm_output_files,
             ),
             name="read_output_node",
         )
@@ -433,7 +448,7 @@ class StatisticsVolume(cpe.Pipeline):
         self.connect(
             [
                 (self.input_node, unzip_node, [("input_files", "in_file")]),
-                (unzip_node, model_creation, [("out_file", "file_list")]),
+                (unzip_node, model_creation, [("output_files", "file_list")]),
                 (get_groups, model_creation, [("idx_group1", "idx_group1")]),
                 (get_groups, model_creation, [("idx_group2", "idx_group2")]),
                 (model_creation, run_spm_model_creation, [("script_file", "m_file")]),
@@ -448,12 +463,12 @@ class StatisticsVolume(cpe.Pipeline):
                 (run_spm_model_result_no_correction, read_output_node, [("spm_mat", "spm_mat")]),
                 (get_groups, read_output_node, [("class_names", "class_names")]),
                 (model_creation, read_output_node, [("covariates", "covariates")]),
-                (read_output_node, self.output_node, [("spmT_0001", "spmT_0001")]),
-                (read_output_node, self.output_node, [("spmT_0002", "spmT_0002")]),
+                (read_output_node, self.output_node, [(("spm_T_maps", _getter, 0), "spmT_0001")]),
+                (read_output_node, self.output_node, [(("spm_T_maps", _getter, 1), "spmT_0002")]),
                 (read_output_node, self.output_node, [("spm_figures", "spm_figures")]),
-                (read_output_node, self.output_node, [("variance_of_error", "variance_of_error")]),
-                (read_output_node, self.output_node, [("resels_per_voxels", "resels_per_voxels")]),
-                (read_output_node, self.output_node, [("mask", "mask")]),
+                (read_output_node, self.output_node, [(("other_spm_files", _getter, 0), "variance_of_error")]),
+                (read_output_node, self.output_node, [(("other_spm_files", _getter, 1), "resels_per_voxels")]),
+                (read_output_node, self.output_node, [(("other_spm_files", _getter, 2), "mask")]),
                 (read_output_node, self.output_node, [("regression_coeff", "regression_coeff")]),
                 (read_output_node, self.output_node, [("contrasts", "contrasts")]),
             ]

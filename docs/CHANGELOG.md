@@ -6,8 +6,197 @@ Main changes to this code/ project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Clinica 0.7.1
+## Clinica 0.9.1
 
+### Fixed
+
+- Fix broken install of release `0.9.0` (see PR [#1304](https://github.com/aramis-lab/clinica/pull/1304))
+
+## Clinica 0.9.0
+
+### Added
+
+- [ixi-to-bids] There is a new converter to convert IXI to BIDS (see PR [#1239](https://github.com/aramis-lab/clinica/pull/1239))
+- [iotools] There is a new tool `clinica iotools describe` to nicely display metadata in `dataset_description.json` files in the console (see PR [#1287](https://github.com/aramis-lab/clinica/pull/1287))
+- [t1-linear] It is now possible to use `t1-linear` with ANTsPy (see PR [#1244](https://github.com/aramis-lab/clinica/pull/1244))
+- [ADNI2BIDS] The converter now support FMAP (see PR [#1119](https://github.com/aramis-lab/clinica/pull/1119))
+- [Doc] Some pages have been refactored to improve readability and make information easier to find (see PR [#1284](https://github.com/aramis-lab/clinica/pull/1284), [#1288](https://github.com/aramis-lab/clinica/pull/1288), and [#1295](https://github.com/aramis-lab/clinica/pull/1295))
+- [Doc] The online documentation now has a glossary page (see PR [#1110](https://github.com/aramis-lab/clinica/pull/1110))
+
+### Breaking changes
+
+- BIDS and CAPS datasets must have a `dataset_description.json` file at the root (see PR [#1127](https://github.com/aramis-lab/clinica/pull/1127) and PR [#1158](https://github.com/aramis-lab/clinica/pull/1158))
+
+### Enhanced
+
+- [Converters] Converters now implement the same API which make them easier to use from Python (see PR [#1140](https://github.com/aramis-lab/clinica/pull/1140))
+
+### Fixed
+
+- [Converters] A few issues with logging have been fixed (see PR [#1181](https://github.com/aramis-lab/clinica/pull/1181))
+- [t1-linear] Fix the `crop_nifti` function which was doing unnecessary resampling (see PR [#1215](https://github.com/aramis-lab/clinica/pull/1215))
+
+## Clinica 0.8.4
+
+### Fixed
+
+- [Pipelines] Fix 'SPM not in matlab path' error when using SPM12 with Matlab (see PR [#1261](https://github.com/aramis-lab/clinica/pull/1261))
+
+## Clinica 0.8.3
+
+### Fixed
+
+- [IOTools] Fix `merge-tsv` when providing a `T1Freesurfer` CAPS directory (see PR [#1240](https://github.com/aramis-lab/clinica/pull/1240))
+
+## Clinica 0.8.2
+
+### Fixed
+
+- [ADNI2BIDS] Fix wrong preprocessing sequence in FDG PET Uniform (see PR [#1159](https://github.com/aramis-lab/clinica/pull/1159))
+- [NIFD2BIDS] Fix check on type in pandas dataframe (see PR [#1230](https://github.com/aramis-lab/clinica/pull/1227))
+- [DWI] `DWIPreprocessingUsingT1` pipeline skips problematic images instead of crashing (see PR [#1169](https://github.com/aramis-lab/clinica/pull/1169))
+- Fix compatibility issues with matplotlib 3.9 (see PR [#1185](https://github.com/aramis-lab/clinica/pull/1185))
+
+## Clinica 0.8.1
+
+### Fixed
+
+- [ADNI2BIDS] Fix `DXSUM_PDXCONV_ADNIALL` unknown clinical file for adni-to-bids converter (see PR [#1144](https://github.com/aramis-lab/clinica/pull/1144))
+- [DWI] Fix DWI preprocessing using T1 rename to caps node (see PR [#1146](https://github.com/aramis-lab/clinica/pull/1146))
+
+## Clinica 0.8.0
+
+### Added
+
+- Python 3.12 is officially supported (see PR [#1065](https://github.com/aramis-lab/clinica/pull/1065))
+
+### Breaking changes
+
+- [DWI] Improve BIDS compliance for DWI preprocessing pipelines (see PR [#1050](https://github.com/aramis-lab/clinica/pull/1050))
+- Python 3.8 is not supported anymore (see PR [#1065](https://github.com/aramis-lab/clinica/pull/1065))
+
+### Enhanced
+
+- [ADNI2BIDS] The converter now takes fmri multiband into account (see PR [#1041](https://github.com/aramis-lab/clinica/pull/1041))
+- [DWI] Set the random seed in pipelines using ANTs (requires having ANTs >= 2.5) (see PR [#1071](https://github.com/aramis-lab/clinica/pull/1071))
+- [Pipelines] Using SPM standalone only requires to set `$SPMSTANDALONE_HOME` and `$MCR_HOME` (see PR [#1105](https://github.com/aramis-lab/clinica/pull/1105))
+- [DOC] The Third-party documentation page has been improved (see PR [#1099](https://github.com/aramis-lab/clinica/pull/1099))
+- [DOC] The documentation page for `StatisticsSurface` has been updated (see PR [#1100](https://github.com/aramis-lab/clinica/pull/1100))
+
+### Fixed
+
+- [ADNI2BIDS] Ignore real and imaginary scans outputted by dcm2niix (see PR [#1029](https://github.com/aramis-lab/clinica/pull/1029))
+- [ADNI2BIDS] Ignore ADC DWI images outputted by dcm2niix (see PR [#1061](https://github.com/aramis-lab/clinica/pull/1061))
+
+## Clinica 0.7.7
+
+### Enhanced
+
+- [ADNI2BIDS] Enable converter to read CSV files with new naming convention from ADNI (see PR #1016)
+- [Converters] Expose `n_procs` option to converters using multiprocessing (see PR #1009)
+- [GENFI2BIDS] Enable converter to extract more clinical data (see PR #1005)
+
+### Fixed
+
+- [IOTools] Fix regression in `merge-tsv` command (see PR #1013 and #1019)
+- [GENFI2BIDS] Fix issue with link and readme data not found by the converter (see PR #1015)
+- [PETLinear] Fix the CLI of PETLinear due to previously added option (see PR #1004)
+- [T1Linear] Fix bad session labels in output file names (see PR #1000)
+- [StatisticsSurface] Some fixes to the pipeline (see PR #840)
+
+## Clinica 0.7.6
+
+### Enhanced
+
+- [Pipelines] The clinica file reader now supports the `run` entity and picks the latest run available by default (see PR #943)
+- [ADNI2BIDS] The ADNI2BIDS converter now handles PET uniform data (see PR #703)
+- [PETLinear] Improve the BIDS compliance of the CAPS output (see PR #935)
+- [T1Linear & FLAIRLinear] Improve the BIDS compliance of the CAPS output (see PR #940)
+
+### Fixed
+
+- [DWI] Fix regression in pipeline DWIPreprocessingUsingT1 which was not generating bvec file since release `0.7.4` (see PR #967)
+- [ADNI2BIDS] Fix broken assertion in the metadata reader for derived images (see PR #957)
+- [ADNI2BIDS] Fix BIDS violations in converter's output (see PR #959)
+
+## Clinica 0.7.5
+
+### Enhanced
+
+- [Converters] Improvements to GENFI to BIDS converter (see PR #909)
+- [Converters] Improvements to Oasis3 to BIDS converter (see PR #911)
+- [Pipelines] Add the possibility to specify a random seed to be used with ANTs (see PR #916)
+
+### Fixed
+
+- [Converters] GENFI to BIDS various fixes (see PRs #912, #923, #927, #930, and #934)
+- [Converters] Fix ADNI to BIDS issue with unsupported visit code "uns1" (see PRs #914 and #920)
+- [MachineLearning] Fix bug in CLI of pipeline `machinelearning-prepare-spatial-svm` (see PR #910)
+
+## Clinica 0.7.4
+
+### Enhanced
+
+- [DWI] Read total readout time and phase encoding direction from JSON files
+- [IOTools] Session numbers are now represented using three digits instead of two
+- [PET] Handle 4D images with dummy fourth dimension
+- [Dependencies] Upgrade Poetry lock files to version 2
+
+### Added
+
+- [Converters] New GENFI to BIDS converter
+- Support for Python 3.11
+
+### Fixed
+
+- [BUG] Fixed issue with NetworkX 3
+- [BUG] Fix run statistics-volume-correction assertion error
+- [DOC] Fix command in statistics volume documentation
+- [IOTools] Fix `create_scan_dict` row extraction condition
+
+## Clinica 0.7.3
+
+### Enhanced
+
+- [CI] Add caching support for unit tests
+- [CI] Refactor testing tools
+- [Dependencies] Bump lxml from 4.9.0 to 4.9.1
+- [Dependencies] Upgrade joblib to 1.2.0
+- [Dependencies] build: Install nipype up to version 1.8.2
+- [SurfStat] Pure python implementation
+- [IOTools] Fix warnings in merge-tsv
+- [Adni2BIDS] Deal with new data from ADNI3
+- [DWIPreprocessingUsingT1] Optimized disk usage of Pipeline DWIPreprocessingUsingT1
+- [IOTools] Allow setting a custom logging directory via environment variable
+- [IOTools] Center all modalities if no modality is specified
+- [Pipelines] Report uncompliant BIDS subjects
+
+### Added
+
+- [Converters] Add support for BIDS Readme 
+- [IOTools] Extend the create-subjects-sessions iotool to CAPS directories
+- [IOTools] Add pet-linear to checks for missing processing
+
+### Fixed
+
+- [UKB2BIDS] Add error if data is not found or filtered 
+- [DWIPreprocessingUsingT1] Add missing `out_file` parameter to DWIBiasCorrect
+- [Converters] UKB2BIDS drop directories labeled as unusable
+- [Adni2BIDS] Handle empty lines in `create_subs_sess_list`
+- [IOTools] Fix `vox_to_world_space_method_1`
+
+## Clinica 0.7.2
+
+### Fixed
+
+- [Pipelines] Fix bug introduced in previous version with the use of the gunzip interface
+- [DWIConnectome] Use ConstrainedSphericalDeconvolution instead of buggy EstimateFOD 
+
+### Enhanced 
+
+- [Adni2Bids] Add compatibility for edge cases introduced in Adni3
+
+## Clinica 0.7.1
 
 ### Added
 - [Doc] add ukbiobank documentation
@@ -30,7 +219,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - [PET*]   Use `trc`instead of `acq` for BIDS compliance
-- [Converters] Remove supperfluous use of `acq` entity in filenames for BIDS compliance
+- [Converters] Remove superfluous use of `acq` entity in filenames for BIDS compliance
 
 ### Added
 - [adni-to-bids] allow extraction of metadata from xml
@@ -151,8 +340,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [Core] Improve Logging for Clinica
 - [Core] Improve CLI through using Click
 - [Core] Nibabel replace get_data() by get_fdata() method for dataobj_images (nibabel)
-- [`adni-to-bids`] Optimization of `adni-to-bids` clincal data extraction
-- [`adni-to-bids`] Replace xlsx by tsv files forclinical data specification
+- [`adni-to-bids`] Optimization of `adni-to-bids` clinical data extraction
+- [`adni-to-bids`] Replace xlsx by tsv files for clinical data specification
 
 ### Fixed
 
@@ -174,7 +363,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- [`oasis-to-bids`]: Remove FSL library depency for OASIS-to-bids conversion.
+- [`oasis-to-bids`]: Remove FSL library dependency for OASIS-to-bids conversion.
 - [Clinica]: Replace exception by warning when CAPs folder not recognized.
 - [`aibl-to-bids`]: Center output nifti files of AIBL.
 - [`aibl-to-bids`]: Extracts DICOM metadata in JSON files.
@@ -191,7 +380,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `pet-linear` pipeline: spatial normalization to the MNI space and intensity normalization of PET images
 - `pet-surface-longitudinal` pipeline: Surface-based longitudinal processing of PET images
-- `check-missing-processing` tool allows creating a TSV file containing information about the piplines executed into a specific CAPS folder
+- `check-missing-processing` tool allows creating a TSV file containing information about the pipelines executed into a specific CAPS folder
 - Conversion information is added once the converter is run to facilitate traceability.
 - Add new keywords available in ADNI3 to the `adni-to-bids` converter
 

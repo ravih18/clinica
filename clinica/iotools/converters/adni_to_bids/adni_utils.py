@@ -1,421 +1,134 @@
-from typing import Union
+from enum import Enum
+from pathlib import Path
+from typing import Iterable, List, Optional
+
+import pandas as pd
+
+from clinica.utils.pet import ReconstructionMethod, Tracer
+from clinica.utils.stream import cprint
+
+__all__ = [
+    "get_subjects_list",
+    "ADNIModality",
+    "ADNIModalityConverter",
+    "ADNIStudy",
+    "correct_diagnosis_sc_adni3",
+    "create_adni_sessions_dict",
+    "create_adni_scans_files",
+    "paths_to_bids",
+    "load_clinical_csv",
+]
 
 
-def visits_to_timepoints(
-    subject,
-    mri_list_subj,
-    adnimerge_subj,
-    modality,
-    visit_field="VISIT",
-    scandate_field="SCANDATE",
-):
-    """
-    A correspondence is established between ADNIMERGE and MRILIST visits, since they have different notations.
+class ADNIStudy(str, Enum):
+    """Possible versions of ADNI studies."""
 
-    Args:
-        subject: Subject identifier
-        mri_list_subj: Dataframe containing list of MRI scans for the subject
-        adnimerge_subj: Dataframe containing visits data for the subject
-        modality: Imaging modality
-        visit_field: field name corresponding to the visit
-        scandate_field: field name corresponding to the scan date
+    ADNI1 = "ADNI1"
+    ADNI2 = "ADNI2"
+    ADNI3 = "ADNI3"
+    ADNIGO = "ADNIGO"
 
-    Returns:
-        [Returns]
-    """
+
+def _define_subjects_list(
+    source_dir: Path,
+    subjs_list_path: Optional[Path] = None,
+) -> List[str]:
+    import re
+
     from clinica.utils.stream import cprint
 
-    if modality == "T1":
-        mri_list_subj = mri_list_subj[mri_list_subj[visit_field] != "ADNI Baseline"]
+    if subjs_list_path:
+        cprint("Loading a subjects lists provided by the user...")
+        return subjs_list_path.read_text().splitlines()
 
-    visits = dict()
-    unique_visits = list(mri_list_subj[visit_field].unique())
-    pending_timepoints = []
+    cprint(f"Using the subjects contained in the ADNI dataset at {source_dir}")
+    rgx = re.compile(r"\d{3}_S_\d{4}")
+    return list(filter(rgx.fullmatch, [folder.name for folder in source_dir.iterdir()]))
 
-    # We try to obtain the corresponding image Visit for a given VISCODE
-    for adni_row in adnimerge_subj.iterrows():
-        visit = adni_row[1]
 
-        preferred_visit_name = get_preferred_visit_name(visit)
+def _check_subjects_list(
+    subjs_list: List[str],
+    clinical_dir: Path,
+) -> List[str]:
+    from copy import copy
 
-        if preferred_visit_name in unique_visits:
-            key_preferred_visit = (visit.VISCODE, visit.COLPROT, visit.ORIGPROT)
-            if key_preferred_visit not in visits.keys():
-                visits[key_preferred_visit] = preferred_visit_name
-            elif visits[key_preferred_visit] != preferred_visit_name:
-                cprint(
-                    f"[{modality}] Subject {subject} has multiple visits for one timepoint."
-                )
+    from clinica.utils.stream import cprint
 
-            unique_visits.remove(preferred_visit_name)
-            continue
-
-        pending_timepoints.append(visit)
-
-    # Then for images.Visit non matching the expected labels we find the closest date in visits list
-    for visit in unique_visits:
-
-        image = (mri_list_subj[mri_list_subj[visit_field] == visit]).iloc[0]
-
-        key_min_visit = get_closest_visit(
-            image, pending_timepoints, subject, visit_field, scandate_field
-        )
-
-        if not key_min_visit:
-            continue
-
-        if key_min_visit not in visits.keys():
-            visits[key_min_visit] = image[visit_field]
-        elif visits[key_min_visit] != image[visit_field]:
+    subjs_list_copy = copy(subjs_list)
+    adni_merge = load_clinical_csv(clinical_dir, "ADNIMERGE")
+    # Check that there are no errors in subjs_list given by the user
+    for subj in subjs_list_copy:
+        adnimerge_subj = adni_merge[adni_merge.PTID == subj]
+        if len(adnimerge_subj) == 0:
             cprint(
-                f"[{modality}] Subject {subject} has multiple visits for one timepoint."
+                msg=f"Subject with PTID {subj} does not have corresponding clinical data."
+                f"Please check your subjects list or directory.",
+                lvl="warning",
             )
+            subjs_list.remove(subj)
+    del subjs_list_copy
 
-    return visits
+    if not subjs_list:
+        cprint(f"Processing an empty list of subjects.", lvl="warning")
+
+    return subjs_list
 
 
-def get_preferred_visit_name(visit):
-    """Provide the expected visit name for a given visit.
+def get_subjects_list(
+    source_dir: Path,
+    clinical_dir: Path,
+    subjs_list_path: Optional[Path] = None,
+) -> List[str]:
+    return _check_subjects_list(
+        _define_subjects_list(source_dir, subjs_list_path), clinical_dir
+    )
 
-    Args:
-        visit: A visit entry from ADNIMERGE
 
-    Returns:
-        string: expected visit name
+class ADNIModality(str, Enum):
+    """Possible modalities supported by the ADNI-to-BIDS converter.
+
+    These are the modalities exposed to the user. There is not a
+    one-to-one relationship with the modality converters. That is,
+    some modalities, like PET_AMYLOID, are associated with multiple
+    converters, while others are associated with only one converter.
+    For this reason, the ADNIModalityConverter enumeration exists,
+    and there is a mapping between a ADNIModality and an iterable of
+    ADNIModalityConverter variants.
     """
-    if visit.ORIGPROT == "ADNI3":
-        if visit.VISCODE == "bl":
-            preferred_visit_name = "ADNI Screening"
-        else:
-            year = str(int(visit.VISCODE[1:]) / 12)
-            preferred_visit_name = f"ADNI3 Year {year} Visit"
-    elif visit.ORIGPROT == "ADNI2":
-        if visit.VISCODE == "bl":
-            preferred_visit_name = "ADNI2 Screening MRI-New Pt"
-        elif visit.VISCODE == "m03":
-            preferred_visit_name = "ADNI2 Month 3 MRI-New Pt"
-        elif visit.VISCODE == "m06":
-            preferred_visit_name = "ADNI2 Month 6-New Pt"
-        else:
-            year = str(int(visit.VISCODE[1:]) / 12)
-            preferred_visit_name = f"ADNI2 Year {year} Visit"
-    else:
-        if visit.VISCODE == "bl":
-            if visit.ORIGPROT == "ADNI1":
-                preferred_visit_name = "ADNI Screening"
-            else:  # ADNIGO
-                preferred_visit_name = "ADNIGO Screening MRI"
-        elif visit.VISCODE == "m03":  # Only for ADNIGO Month 3
-            preferred_visit_name = "ADNIGO Month 3 MRI"
-        else:
-            month = int(visit.VISCODE[1:])
-            if month < 54:
-                preferred_visit_name = f"ADNI1/GO Month {str(month)}"
-            else:
-                preferred_visit_name = f"ADNIGO Month {str(month)}"
-    return preferred_visit_name
+
+    T1 = "T1"
+    PET_FDG = "PET_FDG"
+    PET_AMYLOID = "PET_AMYLOID"
+    PET_TAU = "PET_TAU"
+    DWI = "DWI"
+    FLAIR = "FLAIR"
+    FMRI = "fMRI"
+    FMAP = "FMAP"
 
 
-def get_closest_visit(image, pending_timepoints, subject, visit_field, scandate_field):
-    """Choose the visit with the closest date to a given image acquisition date.
+class ADNIModalityConverter(str, Enum):
+    """Possible modality converters for ADNI.
 
-    Args:
-        image: An image entry from MPRAGEMETA
-        pending_timepoints: List of visit entries from ADNIMERGE
-        subject: Subject identifier
-        visit_field:
-        scandate_field:
-
-    Returns:
-        [Returns]
+    These are not exposed to the user. However, there is a one-to-one
+    relationship with the modality converters. That is, each variant
+    has a corresponding converter.
     """
-    from datetime import datetime
 
-    from clinica.utils.stream import cprint
-
-    min_db = 100000
-    min_db2 = 0
-    min_visit = None
-    min_visit2 = None
-
-    for timepoint in pending_timepoints:
-        db = days_between(image[scandate_field], timepoint.EXAMDATE)
-        if db < min_db:
-            min_db2 = min_db
-            min_visit2 = min_visit
-
-            min_db = db
-            min_visit = timepoint
-
-    if min_visit is None or min_visit.empty:
-        cprint(
-            f"No corresponding timepoint in ADNIMERGE for subject {subject} in visit {image[visit_field]}"
-        )
-        cprint(image, lvl="debug")
-        return None
-
-    if min_visit2 is not None and min_db > 90:
-        cprint(
-            msg=(
-                f"More than 60 days for corresponding timepoint in ADNIMERGE for "
-                f"subject {subject} in visit {image[visit_field]} on {image[scandate_field]}"
-            ),
-            lvl="debug",
-        )
-        cprint(
-            msg=(
-                f"Timepoint 1: {min_visit.VISCODE} - {min_visit.ORIGPROT} "
-                f"on {min_visit.EXAMDATE} (Distance: {min_db} days)"
-            ),
-            lvl="debug",
-        )
-        cprint(
-            msg=(
-                f"Timepoint 2: {min_visit2.VISCODE} - {min_visit2.ORIGPROT} "
-                f"on {min_visit2.EXAMDATE} (Distance: {min_db2} days)"
-            ),
-            lvl="debug",
-        )
-
-        # If image is too close to the date between two visits we prefer the earlier visit
-        if (
-            datetime.strptime(min_visit.EXAMDATE, "%Y-%m-%d")
-            > datetime.strptime(image[scandate_field], "%Y-%m-%d")
-            > datetime.strptime(min_visit2.EXAMDATE, "%Y-%m-%d")
-        ):
-            dif = days_between(min_visit.EXAMDATE, min_visit2.EXAMDATE)
-            if abs((dif / 2.0) - min_db) < 30:
-                min_visit = min_visit2
-
-        cprint(msg=f"We prefer {min_visit.VISCODE}", lvl="debug")
-
-    key_min_visit = (min_visit.VISCODE, min_visit.COLPROT, min_visit.ORIGPROT)
-
-    return key_min_visit
+    T1 = "T1"
+    PET_FDG = "PET_FDG"
+    PET_FDG_UNIFORM = "PET_FDG_UNIFORM"
+    PET_PIB = "PET_PIB"
+    PET_AV45 = "PET_AV45"
+    PET_TAU = "PET_TAU"
+    DWI = "DWI"
+    FLAIR = "FLAIR"
+    FMRI = "fMRI"
+    FMAP = "FMAP"
 
 
-def days_between(d1, d2):
-    """Calculate the days between two dates.
-
-    Args:
-        d1: date 1
-        d2: date 2
-
-    Returns: number of days between date 2 and date 1
-    """
-    from datetime import datetime
-
-    d1 = datetime.strptime(d1, "%Y-%m-%d")
-    d2 = datetime.strptime(d2, "%Y-%m-%d")
-    return abs((d2 - d1).days)
-
-
-def select_image_qc(id_list, mri_qc_subj):
-    """Select image from several scans according to QC.
-
-    Args:
-        id_list: List of images identifiers to choose among
-        mri_qc_subj: Dataframe containing list of QC of scans for the subject
-
-    Returns: int - Chosen image identifier
-    """
-    import numpy as np
-
-    if len(id_list) == 0:
-        return None
-
-    image_ids = ["I" + str(imageuid) for imageuid in id_list]
-    int_ids = [int(imageuid) for imageuid in id_list]
-    images_qc = mri_qc_subj[mri_qc_subj.loni_image.isin(image_ids)]
-
-    if images_qc.empty:
-        return max(int_ids)
-
-    if np.sum(images_qc.series_selected) == 1:
-        selected_image = (
-            images_qc[images_qc.series_selected == 1].iloc[0].loni_image[1:]
-        )
-    else:
-        images_not_rejected = images_qc[images_qc.series_quality < 4]
-
-        if images_not_rejected.empty:
-
-            # There are no images that passed the qc,
-            # so we'll try to see if there are other images without qc.
-            # Otherwise, return None.
-            qc_ids = set([int(qc_id[1:]) for qc_id in images_qc.loni_image.unique()])
-            no_qc_ids = list(set(int_ids) - qc_ids)
-
-            if len(no_qc_ids) == 0:
-                return None
-            else:
-                return max(no_qc_ids)
-
-        # We select the image with the best (lower) QC.
-        # If no positive QC available we choose image with -1 (not performed)
-        series_quality = [
-            q if q > 0 else 4 for q in list(images_not_rejected.series_quality)
-        ]
-        best_q = np.amin(series_quality)
-        if best_q == 4:
-            best_q = -1
-        images_best_qc = images_not_rejected[
-            images_not_rejected.series_quality == best_q
-        ]
-        if len(images_best_qc) == 1:
-            selected_image = images_best_qc.iloc[0].loni_image[1:]
-        else:
-            best_ids = [int(x[1:]) for x in images_best_qc.loni_image.unique()]
-            selected_image = max(best_ids)
-
-    return int(selected_image)
-
-
-def get_images_pet(
-    subject,
-    pet_qc_subj,
-    subject_pet_meta,
-    df_cols,
-    modality,
-    sequences_preprocessing_step,
-    viscode_field="VISCODE2",
-):
-    """Selection of scans passing QC and at the chosen preprocessing stage is performed.
-
-    Args:
-        subject: Subject identifier
-        pet_qc_subj: Dataframe containing QC for scans for the subject
-        subject_pet_meta: Dataframe containing metadata for scans for the subject
-        df_cols: Columns of output dataframe
-        modality: Imaging modality
-        sequences_preprocessing_step: List of sequence names that correspond to desired preprocessing stage
-        viscode_field: Name of the field in the pet_qc_subj dataframe that provides to the visit code
-
-    Returns: Dataframe containing images metadata
-    """
-    import pandas as pd
-
-    from clinica.utils.stream import cprint
-
-    subj_dfs_list = []
-
-    for visit in list(pet_qc_subj[viscode_field].unique()):
-        if pd.isna(visit):
-            continue
-
-        pet_qc_visit = pet_qc_subj[pet_qc_subj[viscode_field] == visit]
-
-        if pet_qc_visit.empty:
-            continue
-
-        # If there are several scans for a timepoint we start with image acquired last (higher LONIUID)
-        pet_qc_visit = pet_qc_visit.sort_values("LONIUID", ascending=False)
-
-        original_pet_meta = pd.DataFrame(columns=subject_pet_meta.columns)
-        qc_visit = pet_qc_visit.iloc[0]
-        for qc_index in range(len(pet_qc_visit)):
-            qc_visit = pet_qc_visit.iloc[qc_index]
-
-            # We are looking for FDG PET metadata of Original images, that passed QC,
-            # acquired at the same date as the current scan that passed QC for the current visit,
-            # not containing ‘early’ in the sequence name
-
-            original_pet_meta = subject_pet_meta[
-                (subject_pet_meta["Orig/Proc"] == "Original")
-                & (subject_pet_meta["Image ID"] == int(qc_visit.LONIUID[1:]))
-                & (subject_pet_meta["Scan Date"] == qc_visit.EXAMDATE)
-                & ~subject_pet_meta.Sequence.str.contains("early", case=False, na=False)
-            ]
-            # Check if we found a matching image. If yes, we stop looking for it.
-            if not original_pet_meta.empty:
-                break
-
-        if original_pet_meta.empty:
-            cprint(
-                f"No {modality} images metadata for subject {subject} and visit {qc_visit[viscode_field]}"
-            )
-            continue
-
-        original_image = original_pet_meta.iloc[0]
-
-        # Co-registered and Averaged image with the same Series ID of the original image
-        averaged_pet_meta = subject_pet_meta[
-            subject_pet_meta["Sequence"].isin(sequences_preprocessing_step)
-            & (subject_pet_meta["Series ID"] == original_image["Series ID"])
-        ]
-
-        # If an explicit Co-registered, Averaged image does not exist,
-        # the original image is already in that preprocessing stage.
-
-        if averaged_pet_meta.empty:
-            sel_image = original_image
-            original = True
-        else:
-            sel_image = averaged_pet_meta.iloc[0]
-            original = False
-
-        phase = "ADNI1" if modality == "PIB-PET" else qc_visit.Phase
-        visit = sel_image.Visit
-        sequence = replace_sequence_chars(sel_image.Sequence)
-        date = sel_image["Scan Date"]
-        study_id = sel_image["Study ID"]
-        series_id = sel_image["Series ID"]
-        image_id = sel_image["Image ID"]
-
-        # If it is an amyloid PET we need to find which is the tracer of the scan and add it to the
-        if modality == "Amyloid-PET":
-            if "av45" in sel_image.Sequence.lower():
-                tracer = "AV45"
-            elif "fbb" in sel_image.Sequence.lower():
-                tracer = "FBB"
-            else:
-                cprint(
-                    msg=(
-                        f"Unknown tracer for Amyloid PET image metadata for subject {subject} "
-                        f"for visit {qc_visit[viscode_field]}"
-                    ),
-                    lvl="warning",
-                )
-                continue
-
-            scan_data = [
-                [
-                    phase,
-                    subject,
-                    qc_visit[viscode_field],
-                    str(visit),
-                    sequence,
-                    date,
-                    str(study_id),
-                    str(series_id),
-                    str(image_id),
-                    original,
-                    tracer,
-                ]
-            ]
-        else:
-            scan_data = [
-                [
-                    phase,
-                    subject,
-                    qc_visit[viscode_field],
-                    str(visit),
-                    sequence,
-                    date,
-                    str(study_id),
-                    str(series_id),
-                    str(image_id),
-                    original,
-                ]
-            ]
-
-        row_to_append = pd.DataFrame(scan_data, columns=df_cols)
-        subj_dfs_list.append(row_to_append)
-
-    return subj_dfs_list
-
-
-def correct_diagnosis_sc_adni3(clinical_data_dir, participants_df):
+def correct_diagnosis_sc_adni3(
+    clinical_data_dir: Path, participants_df: pd.DataFrame
+) -> pd.DataFrame:
     """Add missing diagnosis at screening in ADNI3 due to changes in DX_bl.
 
     See https://groups.google.com/g/adni-data/c/whYhKafN_0Q.
@@ -428,17 +141,20 @@ def correct_diagnosis_sc_adni3(clinical_data_dir, participants_df):
     Returns:
         Corrected participants_df.
     """
-    from os import path
-
-    import pandas as pd
-
-    from clinica.utils.stream import cprint
-
     diagnosis_dict = {1: "CN", 2: "MCI", 3: "AD"}
-    dxsum_df = pd.read_csv(
-        path.join(clinical_data_dir, "DXSUM_PDXCONV_ADNIALL.csv")
-    ).set_index(["PTID", "VISCODE2"])
-    missing_sc = participants_df[participants_df.original_study == "ADNI3"]
+    # DXSUM_PDXCONV_ADNIALL has been renamed to DXSUM_PDXCONV
+    # this ensures old ADNI downloads still work with recent versions of Clinica
+    try:
+        dxsum_df = load_clinical_csv(
+            clinical_data_dir, "DXSUM_PDXCONV_ADNIALL"
+        ).set_index(["PTID", "VISCODE2"])
+    except OSError:
+        dxsum_df = load_clinical_csv(clinical_data_dir, "DXSUM_PDXCONV").set_index(
+            ["PTID", "VISCODE2"]
+        )
+    missing_sc = participants_df[
+        participants_df.original_study == ADNIStudy.ADNI3.value
+    ]
     participants_df.set_index("alternative_id_1", drop=True, inplace=True)
     for alternative_id in missing_sc.alternative_id_1.values:
         try:
@@ -448,7 +164,7 @@ def correct_diagnosis_sc_adni3(clinical_data_dir, participants_df):
             participants_df.loc[alternative_id, "diagnosis_sc"] = diagnosis_sc
         except KeyError:
             cprint(
-                msg=(f"Unknown screening diagnosis for subject {alternative_id}."),
+                msg=f"Unknown screening diagnosis for subject {alternative_id}.",
                 lvl="warning",
             )
             participants_df.loc[alternative_id, "diagnosis_sc"] = "n/a"
@@ -457,56 +173,15 @@ def correct_diagnosis_sc_adni3(clinical_data_dir, participants_df):
     return participants_df
 
 
-def replace_sequence_chars(sequence_name):
-    """Replace special characters in the sequence by underscores (as done for corresponding folder names in ADNI).
-
-    Args:
-        sequence_name: sequence to process
-
-    Returns: the new string
-    """
-    import re
-
-    return re.sub("[ /;*()<>:]", "_", sequence_name)
-
-
-def write_adni_sessions_tsv(df_subj_sessions, bids_subjs_paths):
-    import pandas as pd
-
+def _write_adni_sessions_tsv(
+    df_subj_sessions: pd.DataFrame, bids_subjs_paths: list[Path]
+):
     """Write the result of method create_session_dict into several TSV files.
 
     Args:
         df_subj_sessions: global dataframe containing clinical sessions data for all subjects
         bids_subjs_paths: a list with the path to all bids subjects
     """
-    import os
-    from os import path
-
-    def compute_amyloid_status(row: pd.DataFrame) -> str:
-        if (
-            pd.isnull(row["adni_av45"])
-            and pd.isnull(row["adni_pib"])
-            and isinstance(row["adni_abeta"], float)
-        ):
-            return "Au"
-        elif row["adni_av45"] > 1.1 or row["adni_pib"] > 1.5 or row["adni_abeta"] < 192:
-            return "A+"
-        elif (
-            (pd.isnull(row["adni_av45"]) or row["adni_av45"] < 1.1)
-            and (pd.isnull(row["adni_pib"]) or row["adni_pib"] < 1.5)
-            and (isinstance(row["adni_abeta"], float) or row["adni_abeta"] > 192)
-        ):
-            return "A-"
-        else:
-            return "n/a"
-
-    def compute_ptau_status(row: pd.DataFrame) -> str:
-        if pd.isnull(row["adni_ptau"]):
-            return "Tu"
-        elif row["adni_ptau"] > 23:
-            return "T+"
-        else:
-            return "T-"
 
     df_subj_sessions["adas_memory"] = (
         df_subj_sessions["adas_Q1"]
@@ -531,7 +206,7 @@ def write_adni_sessions_tsv(df_subj_sessions, bids_subjs_paths):
 
     # compute the amyloid and ptau status
     df_subj_sessions["a_stat"] = df_subj_sessions.apply(
-        lambda x: compute_amyloid_status(
+        lambda x: _compute_amyloid_status(
             x[["adni_av45", "adni_pib", "adni_abeta"]].apply(
                 pd.to_numeric, errors="coerce"
             )
@@ -539,89 +214,84 @@ def write_adni_sessions_tsv(df_subj_sessions, bids_subjs_paths):
         axis=1,
     )
     df_subj_sessions["tau_stat"] = df_subj_sessions.apply(
-        lambda x: compute_ptau_status(
+        lambda x: _compute_ptau_status(
             x[["adni_ptau"]].apply(pd.to_numeric, errors="coerce")
         ),
         axis=1,
     )
-
-    for sp in bids_subjs_paths:
-        os.makedirs(sp, exist_ok=True)
-
-        bids_id = sp.split(os.sep)[-1]
-
-        if bids_id == "conversion_info":
+    for subject_path in bids_subjs_paths:
+        subject_path.mkdir(parents=True, exist_ok=True)
+        if subject_path.name == "conversion_info":
             continue
-        else:
-            df_tmp = df_subj_sessions[df_subj_sessions["RID"] == bids_id[12:]]
-
-            df_tmp.to_csv(
-                path.join(sp, f"{bids_id}_sessions.tsv"),
-                sep="\t",
-                index=False,
-                encoding="utf-8",
-            )
+        df_tmp = df_subj_sessions[df_subj_sessions["RID"] == subject_path.name[12:]]
+        df_tmp.to_csv(
+            subject_path / f"{subject_path.name}_sessions.tsv",
+            sep="\t",
+            index=False,
+            encoding="utf-8",
+        )
 
 
-def remove_fields_duplicated(bids_fields):
-    """Remove duplicated fields in a list.
-
-    Args:
-        bids_fields: List of fields
-
-    Returns: list
-    """
-    seen = set()
-    seen_add = seen.add
-    return [x for x in bids_fields if not (x in seen or seen_add(x))]
-
-
-def bids_id_to_loni(bids_id: str) -> Union[str, None]:
-    """Convert a subject id of the form sub-ADNI000S0000
-    back to original format 000_S_0000
-    """
-    import re
-
-    ids = re.findall(r"\d+", bids_id)
-    if len(ids) == 2:
-        return ids[0] + "_S_" + ids[1]
-    return None
+def _compute_amyloid_status(row: pd.DataFrame) -> str:
+    if (
+        pd.isnull(row["adni_av45"])
+        and pd.isnull(row["adni_pib"])
+        and isinstance(row["adni_abeta"], float)
+    ):
+        return "Au"
+    if row["adni_av45"] > 1.1 or row["adni_pib"] > 1.5 or row["adni_abeta"] < 192:
+        return "A+"
+    if (
+        (pd.isnull(row["adni_av45"]) or row["adni_av45"] < 1.1)
+        and (pd.isnull(row["adni_pib"]) or row["adni_pib"] < 1.5)
+        and (isinstance(row["adni_abeta"], float) or row["adni_abeta"] > 192)
+    ):
+        return "A-"
+    return "n/a"
 
 
-def filter_subj_bids(df_files, location, bids_ids):
-    import clinica.iotools.bids_utils as bids
+def _compute_ptau_status(row: pd.DataFrame) -> str:
+    if pd.isnull(row["adni_ptau"]):
+        return "Tu"
+    if row["adni_ptau"] > 23:
+        return "T+"
+    return "T-"
+
+
+def _filter_subj_bids(
+    df_files: pd.DataFrame, location: str, bids_ids: list[str]
+) -> pd.DataFrame:
+    from clinica.iotools.bids_utils import remove_space_and_symbols
 
     # Depending on the file that needs to be open, identify and
     # preprocess the column that contains the subjects ids.
+    # todo : use id class here ?
     bids_ids = [x[8:] for x in bids_ids if "sub-ADNI" in x]
     if location == "ADNIMERGE.csv":
         df_files["RID"] = df_files["PTID"].apply(
-            lambda x: bids.remove_space_and_symbols(x)[4:]
+            lambda x: remove_space_and_symbols(x)[4:]
         )
     else:
-        df_files["RID"] = df_files["RID"].apply(lambda x: pad_id(x))
+        df_files["RID"] = df_files["RID"].apply(lambda x: _pad_id(x))
     return df_files.loc[df_files["RID"].isin([x[4:] for x in bids_ids])]
 
 
-def update_age(row):
+def _update_age(row: pd.DataFrame) -> float:
     """Update age with time passed since bl to current visit"""
     from datetime import datetime
 
-    if row["session_id"] != "ses-M00":
-        examdate = datetime.strptime(row["EXAMDATE"], "%Y-%m-%d")
-        examdate_bl = datetime.strptime(row["EXAMDATE_bl"], "%Y-%m-%d")
-        delta = examdate - examdate_bl
-
-        updated_age = round(
+    if row["session_id"] != "ses-M000":
+        exam_date = datetime.strptime(row["EXAMDATE"], "%Y-%m-%d")
+        exam_date_baseline = datetime.strptime(row["EXAMDATE_bl"], "%Y-%m-%d")
+        delta = exam_date - exam_date_baseline
+        return round(
             float(row["AGE"]) + (delta.days / 365.25),
             1,
         )
-    else:
-        updated_age = row["AGE"]
-    return updated_age
+    return row["AGE"]
 
 
-def pad_id(ref_id):
+def _pad_id(ref_id: str) -> str:
     """Add leading zeros to the RID to keep à length of 4"""
     rid = str(ref_id)
     # Fill the rid with the needed number of zero
@@ -631,12 +301,40 @@ def pad_id(ref_id):
     return rid
 
 
-def get_visit_id(row, location):
-    """Return a common visit ID across different files"""
-    import pandas as pd
+def _compute_session_id(df: pd.DataFrame, csv_filename: str) -> pd.DataFrame:
+    """Compute session ID from visit code.
 
-    locations_visicode2 = [
+    The CSV file name is used to determine in which column of
+    the dataframe the visit code should be found.
+    """
+    visit_code_column = _get_visit_code_column_name(csv_filename)
+    if visit_code_column not in df:
+        raise ValueError(
+            f"DataFrame does not contain a column named '{visit_code_column}', "
+            "which is supposed to encode the visit code. The columns present in "
+            f"the DataFrame are: {df.columns}."
+        )
+    return df.assign(
+        session_id=lambda _df: _df[visit_code_column].apply(
+            lambda x: _get_session_id_from_visit_code(x)
+        )
+    )
+
+
+def _get_visit_code_column_name(csv_filename: str) -> str:
+    """Return the name of the column containing the visit code."""
+    if _is_a_visit_code_2_type(csv_filename):
+        return "VISCODE2"
+    if _is_a_time_point_type(csv_filename):
+        return "Timepoint"
+    return "VISCODE"
+
+
+def _is_a_visit_code_2_type(csv_filename: str) -> bool:
+    """If the csv file is among these files, then the visit code column is 'VISCODE2'."""
+    return csv_filename in {
         "ADAS_ADNIGO2.csv",
+        "DXSUM_PDXCONV.csv",
         "DXSUM_PDXCONV_ADNIALL.csv",
         "CDR.csv",
         "NEUROBAT.csv",
@@ -654,47 +352,59 @@ def get_visit_id(row, location):
         "CCI.csv",
         "NPIQ.csv",
         "NPI.csv",
-    ]
+    }
 
-    if location in locations_visicode2:
-        if pd.isnull(row["VISCODE2"]) or row["VISCODE2"] == "f":
-            return None
-        if row["VISCODE2"] == "sc":
-            return "sc"  # visit_id = "bl"
-        else:
-            visit_id = row["VISCODE2"]
-    elif location in [
+
+def _is_a_time_point_type(csv_filename: str) -> bool:
+    """If the csv file is among these files, then the visit code column is 'Timepoint'."""
+    return csv_filename in {
         "BHR_EVERYDAY_COGNITION.csv",
         "BHR_BASELINE_QUESTIONNAIRE.csv",
         "BHR_LONGITUDINAL_QUESTIONNAIRE.csv",
-    ]:
-        visit_id = row["Timepoint"]
-    else:
-        visit_id = row["VISCODE"]
-    return viscode_to_session(visit_id)
+    }
+
+
+def _get_session_id_from_visit_code(visit_code: str) -> Optional[str]:
+    """Checks that the visit code found in the data is supported by
+    the converter utility function `viscode_to_session` before using it.
+    There are a few special cases that are handled here.
+    """
+    from clinica.iotools.converter_utils import viscode_to_session
+
+    if _is_visit_code_not_supported(visit_code):
+        return None
+    if visit_code == "sc":
+        return "sc"
+    return viscode_to_session(visit_code)
+
+
+def _is_visit_code_not_supported(visit_code: str) -> bool:
+    """Return True is the visit code is not supported by the converter.
+
+    There are a few known values like "f" or "uns1" which are present in
+    ADNI data that are not supported for a mapping to a session ID.
+    """
+    unsupported_values = {"f", "uns1"}
+    return pd.isnull(visit_code) or visit_code in unsupported_values
 
 
 def create_adni_sessions_dict(
-    bids_ids, clinic_specs_path, clinical_data_dir, bids_subjs_paths
+    bids_ids: list[str],
+    clinical_specifications_folder: Path,
+    clinical_data_dir: Path,
+    bids_subjs_paths: list[Path],
 ):
     """Extract all the data required for the sessions files and organize them in a dictionary.
 
     Args:
         bids_ids: list of subject IDs to process
-        clinic_specs_path: path to the specifications for converting the clinical data
+        clinical_specifications_folder: path to the specifications for converting the clinical data
         clinical_data_dir: path to the clinical data folder
         bids_subjs_paths: a list with the path to all the BIDS subjects
     """
-
-    from os import path
-
-    import pandas as pd
-
     from clinica.utils.stream import cprint
 
-    # Load data
-    df_sessions = pd.read_csv(clinic_specs_path + "_sessions.tsv", sep="\t")
-
+    df_sessions = pd.read_csv(clinical_specifications_folder / "sessions.tsv", sep="\t")
     files = list(df_sessions["ADNI location"].unique())
     files = [x for x in files if not pd.isnull(x)]
     df_subj_session = pd.DataFrame()
@@ -703,54 +413,54 @@ def create_adni_sessions_dict(
     # Iterate over the metadata files
 
     for location in files:
-
         location = location.split("/")[0]
-        if path.exists(path.join(clinical_data_dir, location)):
+        try:
+            df_file = load_clinical_csv(clinical_data_dir, location.split(".")[0])
+        except IOError:
+            continue
+        df_filtered = _filter_subj_bids(df_file, location, bids_ids).copy()
+        if not df_filtered.empty:
+            df_filtered = _compute_session_id(df_filtered, location)
+            # Filter rows with invalid session IDs.
+            df_filtered.dropna(subset="session_id", inplace=True)
 
-            file_to_read_path = path.join(clinical_data_dir, location)
-            cprint(f"\tReading clinical data file: {location}")
-
-            df_file = pd.read_csv(file_to_read_path, dtype=str)
-            df_filtered = filter_subj_bids(df_file, location, bids_ids).copy()
-
-            if not df_filtered.empty:
-                # Get session ID from visit code.
-                df_filtered["session_id"] = df_filtered.apply(
-                    lambda x: get_visit_id(x, location), axis=1
-                )
-
-                # Filter rows with invalid session IDs.
-                df_filtered.dropna(subset="session_id", inplace=True)
-
-                if location == "ADNIMERGE.csv":
-                    df_filtered["AGE"] = df_filtered.apply(
-                        lambda x: update_age(x), axis=1
-                    )
-                df_subj_session = update_sessions_df(
-                    df_subj_session, df_filtered, df_sessions, location
-                )
-            else:
-                dict_column_correspondence = dict(
-                    zip(df_sessions["ADNI"], df_sessions["BIDS CLINICA"])
-                )
-                df_filtered.rename(columns=dict_column_correspondence, inplace=True)
-                df_filtered = df_filtered.loc[
-                    :, (~df_filtered.columns.isin(df_subj_session.columns))
-                ]
-                df_subj_session = pd.concat([df_subj_session, df_filtered], axis=1)
-
+            if location == "ADNIMERGE.csv":
+                df_filtered["AGE"] = df_filtered.apply(lambda x: _update_age(x), axis=1)
+            df_subj_session = _update_sessions_df(
+                df_subj_session, df_filtered, df_sessions, location
+            )
+        else:
+            cprint(
+                f"Clinical dataframe extracted from {location} is empty after filtering.",
+                lvl="debug",
+            )
+            dict_column_correspondence = dict(
+                zip(df_sessions["ADNI"], df_sessions["BIDS CLINICA"])
+            )
+            df_filtered.rename(columns=dict_column_correspondence, inplace=True)
+            df_filtered = df_filtered.loc[
+                :, (~df_filtered.columns.isin(df_subj_session.columns))
+            ]
+            df_subj_session = pd.concat([df_subj_session, df_filtered], axis=1)
     if df_subj_session.empty:
-        raise ValueError("Empty dataset detected. Clinical data cannot be extracted.")
-
+        cprint(
+            "Empty dataset detected. Clinical data cannot be extracted.", lvl="warning"
+        )
+        return
     # Nv/None refer to sessions whose session is undefined. "sc" is the screening session with unreliable (incomplete)
     # data.
     df_subj_session = df_subj_session[
         df_subj_session.session_id.str.contains(r"ses-M\d+")
     ]
-    write_adni_sessions_tsv(df_subj_session, bids_subjs_paths)
+    _write_adni_sessions_tsv(df_subj_session, bids_subjs_paths)
 
 
-def update_sessions_df(df_subj_session, df_filtered, df_sessions, location):
+def _update_sessions_df(
+    df_subj_session: pd.DataFrame,
+    df_filtered: pd.DataFrame,
+    df_sessions: pd.DataFrame,
+    location: str,
+) -> pd.DataFrame:
     """Update the sessions dataframe with data of current subject.
 
     Args:
@@ -759,9 +469,6 @@ def update_sessions_df(df_subj_session, df_filtered, df_sessions, location):
         df_sessions: dataframe with the the metadata information
         location: the clinica data filename
     """
-
-    import pandas as pd
-
     df_columns_to_add = df_sessions[
         df_sessions["ADNI location"].str.contains(location, na=False)
     ][["BIDS CLINICA", "ADNI"]]
@@ -770,7 +477,6 @@ def update_sessions_df(df_subj_session, df_filtered, df_sessions, location):
         (df_columns_to_add["ADNI"].isin(df_filtered.columns))
         & (~df_columns_to_add["BIDS CLINICA"].isin(df_subj_session.columns))
     ]
-
     df_temp = df_filtered[
         ["RID", "session_id"] + list(df_columns_to_add["ADNI"])
     ].copy()
@@ -778,14 +484,12 @@ def update_sessions_df(df_subj_session, df_filtered, df_sessions, location):
 
     # if error in adni data (duplicate session id), keep only the first row
     df_temp.drop_duplicates(subset=["RID", "session_id"], keep="first", inplace=True)
-
     try:
         df_temp["diagnosis"] = df_temp["diagnosis"].apply(
-            lambda x: convert_diagnosis_code(x)
+            lambda x: _convert_diagnosis_code(x)
         )
     except KeyError:
         pass
-
     if df_subj_session.empty:
         df_subj_session = df_temp
     else:
@@ -795,7 +499,7 @@ def update_sessions_df(df_subj_session, df_filtered, df_sessions, location):
     return df_subj_session
 
 
-def convert_diagnosis_code(diagnosis_code):
+def _convert_diagnosis_code(diagnosis_code: str) -> str:
     """Convert the string field DX contained in ADNIMERGE.csv into a code that identify the diagnosis.
 
     Args:
@@ -804,80 +508,64 @@ def convert_diagnosis_code(diagnosis_code):
     Returns:
         A code that identify a diagnosis
     """
-    from pandas import isna
-
-    # Legend
     diagnosis = {"CN": "CN", "MCI": "MCI", "Dementia": "AD"}
 
-    if isna(diagnosis_code):
+    if pd.isna(diagnosis_code):
         return diagnosis_code
-    else:
+    try:
         return diagnosis[diagnosis_code]
+    except KeyError:
+        raise KeyError(f"Unknown diagnosis code {diagnosis_code}.")
 
 
-def create_adni_scans_files(conversion_path, bids_subjs_paths):
+def create_adni_scans_files(conversion_path: Path, bids_subjs_paths: list[Path]):
     """Create scans.tsv files for ADNI.
 
     Args:
         conversion_path: path to the conversion_info folder
         bids_subjs_paths: list of bids subject paths
     """
-    import os
-    from glob import glob
     from os import path
-    from os.path import normpath
 
-    import pandas as pd
-
+    from clinica.iotools.bids_utils import StudyName, bids_id_factory
     from clinica.utils.stream import cprint
 
     scans_fields_bids = ["filename", "scan_id", "mri_field"]
 
     conversion_versions = [
-        folder
-        for folder in os.listdir(conversion_path)
-        if folder[0] == "v" and path.isdir(path.join(conversion_path, folder))
+        folder.name
+        for folder in conversion_path.iterdir()
+        if folder.name[0] == "v" and (conversion_path / folder).is_dir()
     ]
     conversion_versions = sorted(
         conversion_versions, key=lambda x: int(x.split("v")[1])
     )
     older_version = conversion_versions[-1]
     converted_dict = dict()
-    for tsv_path in os.listdir(path.join(conversion_path, older_version)):
-        modality = tsv_path.split("_paths")[0]
-        df = pd.read_csv(path.join(conversion_path, older_version, tsv_path), sep="\t")
+    for tsv_path in (conversion_path / older_version).iterdir():
+        modality = tsv_path.name.split("_paths")[0]
+        df = pd.read_csv(conversion_path / older_version / tsv_path, sep="\t")
         df.set_index(["Subject_ID", "VISCODE"], inplace=True, drop=True)
         converted_dict[modality] = df
 
-    for bids_subj_path in bids_subjs_paths:
+    for bids_subject_path in bids_subjs_paths:
         # Create the file
-        bids_id = os.path.basename(normpath(bids_subj_path))
-        subject_id = "_S_".join(bids_id[8::].split("S"))
-
-        sessions_paths = glob(path.join(bids_subj_path, "ses-*"))
-        for session_path in sessions_paths:
-            session_name = session_path.split(os.sep)[-1]
-            viscode = session_to_viscode(session_name[4::])
-            tsv_name = f"{bids_id}_{session_name}_scans.tsv"
-
-            # If the file already exists, remove it
-            if os.path.exists(path.join(session_path, tsv_name)):
-                os.remove(path.join(session_path, tsv_name))
-
-            scans_tsv = open(path.join(session_path, tsv_name), "a")
+        bids_id = bids_subject_path.resolve().name
+        subject_id = bids_id_factory(StudyName.ADNI)(bids_id).to_original_study_id()
+        for session_path in bids_subject_path.glob("ses-*"):
+            viscode = _session_label_to_viscode(session_path.name[4::])
+            tsv_name = f"{bids_id}_{session_path.name}_scans.tsv"
+            (session_path / tsv_name).unlink(missing_ok=True)
+            scans_tsv = open(session_path / tsv_name, "a")
             scans_df = pd.DataFrame(columns=scans_fields_bids)
             scans_df.to_csv(scans_tsv, sep="\t", index=False, encoding="utf-8")
 
             # Extract modalities available for each subject
-            mod_available = glob(path.join(session_path, "*"))
-            for mod in mod_available:
-                mod_name = os.path.basename(mod)
-                files = glob(path.join(mod, "*"))
-                for file in files:
+            for mod in session_path.glob("*"):
+                for file in mod.glob("*"):
                     scans_df = pd.DataFrame(index=[0], columns=scans_fields_bids)
-                    file_name = os.path.basename(file)
-                    scans_df["filename"] = path.join(mod_name, file_name)
-                    converted_mod = find_conversion_mod(file_name)
+                    scans_df["filename"] = path.join(mod.name, file.name)
+                    converted_mod = _find_conversion_mod(file.name)
                     conversion_df = converted_dict[converted_mod]
                     try:
                         scan_id = conversion_df.loc[(subject_id, viscode), "Image_ID"]
@@ -889,454 +577,550 @@ def create_adni_scans_files(conversion_path, bids_subjs_paths):
                             scans_df["mri_field"] = field_strength
                     except KeyError:
                         cprint(
-                            msg=f"No information found for file {file_name}",
+                            msg=f"No information found for file {file.name}",
                             lvl="warning",
                         )
-
                     scans_df = scans_df.fillna("n/a")
                     scans_df.to_csv(
                         scans_tsv, header=False, sep="\t", index=False, encoding="utf-8"
                     )
 
 
-def find_conversion_mod(file_name):
+def _find_conversion_mod(file_name: str) -> str:
     from clinica.utils.pet import Tracer
 
     suffix = file_name.split("_")[-1].split(".")[0]
+
     if suffix == "T1w":
         return "t1"
-    elif suffix == "FLAIR":
+    if suffix == "FLAIR":
         return "flair"
-    elif suffix == "dwi":
+    if suffix == "dwi":
         return "dwi"
-    elif suffix == "bold":
+    if suffix == "bold":
         return "fmri"
-    elif suffix == "pet":
+    if suffix in (
+        "fmap",
+        "ph",
+        "e1",
+        "e2",
+        "phase1",
+        "phase2",
+        "phasediff",
+        "magnitude1",
+        "magnitude2",
+    ):
+        return "fmap"
+    if suffix == "pet":
         tracer = file_name.split("trc-")[1].split("_")[0]
         if tracer in (Tracer.AV45, Tracer.FBB):
             return "amyloid_pet"
-        else:
-            return f"{tracer}_pet"
-    else:
-        raise ValueError(f"Conversion modality could not be found for file {file_name}")
+        return f"{tracer}_pet"
+    raise ValueError(f"Conversion modality could not be found for file {file_name}")
 
 
-def find_image_path(images, source_dir, modality, prefix, id_field):
-    """
-    For each image, the path to an existing image file or folder is created from image metadata.
-
-    Args:
-        images: List of images metadata
-        source_dir: path to the ADNI directory
-        modality: Imaging modality
-        prefix: Prefix to prepend to image identifier to create name of folder containing the image
-        id_field: Name of the field in images metadata dataframe containing the image identifier to use
-
-    Returns: Dataframe containing metadata and existing paths
-    """
-    from pathlib import Path
-
-    import pandas as pd
-
-    from clinica.utils.stream import cprint
-
-    is_dicom = []
-    image_folders = []
-
-    for _, image in images.iterrows():
-        # Base directory where to look for image files.
-        seq_path = Path(source_dir) / str(image["Subject_ID"])
-
-        # Generator finding files containing the image ID.
-        find_file = filter(
-            lambda p: p.is_file(),
-            seq_path.rglob(f"*_I{image['Image_ID']}.*"),
-        )
-
-        try:
-            # Grab the first file from the generator.
-            next_file: Path = next(find_file)
-
-            # Whether the image data are DICOM or not.
-            dicom = "dcm" in next_file.suffix
-
-            # Compute the image path (DICOM folder or NIfTI path).
-            image_path = str(next_file.parent if dicom else next_file)
-        except StopIteration:
-            # In case no file is found.
-            image_path = ""
-            dicom = True
-
-        is_dicom.append(dicom)
-        image_folders.append(image_path)
-        if image_path == "":
-            cprint(
-                msg=(
-                    f"No {modality} image path found for subject {image.Subject_ID} in visit {image.VISCODE} "
-                    f"with image ID {image.Image_ID}"
-                ),
-                lvl="info",
-            )
-
-    images.loc[:, "Is_Dicom"] = pd.Series(is_dicom, index=images.index)
-    images.loc[:, "Path"] = pd.Series(image_folders, index=images.index)
-
-    return images
-
-
-def paths_to_bids(images, bids_dir, modality, mod_to_update=False):
+def paths_to_bids(
+    images: pd.DataFrame,
+    bids_dir: Path,
+    modality: ADNIModalityConverter,
+    mod_to_update: bool = False,
+    n_procs: Optional[int] = 1,
+) -> List[Path]:
     """Images in the list are converted and copied to directory in BIDS format.
 
-    Args:
-        images: List of images metadata and paths
-        bids_dir: Path to the output BIDS directory
-        modality: Imaging modality
-        mod_to_update: If True, pre-existing images in the BIDS directory will be erased and extracted agai n.
+    Parameters
+    ----------
+    images : pd.DataFrame
+        List of images metadata and paths.
+
+    bids_dir : Path
+        The path to the output BIDS directory.
+
+    modality : str
+        Imaging modality.
+
+    mod_to_update : bool
+        If True, pre-existing images in the BIDS directory will be erased
+        and extracted again.
+
+    n_procs : int, optional
+        The number of processes to use for conversion.
+        Default=1.
+
+    Returns
+    -------
+    output_file_treated : list of paths
+        List of path to image files created.
+        This list contains None values for files where the
+        conversion wasn't successful.
     """
     from functools import partial
-    from multiprocessing import Pool, cpu_count
-
-    if modality.lower() not in [
-        "t1",
-        "dwi",
-        "flair",
-        "fmri",
-        "fdg",
-        "pib",
-        "av45_fbb",
-        "tau",
-    ]:
-        # This should never be reached
-        raise RuntimeError(
-            modality.lower() + " is not supported for conversion in paths_to_bids"
-        )
+    from multiprocessing import Pool
 
     images_list = list([data for _, data in images.iterrows()])
-
-    with Pool(processes=max(cpu_count() - 1, 1)) as pool:
-        create_file_ = partial(
-            create_file,
-            modality=modality,
-            bids_dir=bids_dir,
-            mod_to_update=mod_to_update,
-        )
+    create_file_ = partial(
+        _create_file,
+        modality=modality,
+        bids_dir=bids_dir,
+        mod_to_update=mod_to_update,
+    )
+    # If n_procs==1 do not rely on a Process Pool to enable classical debugging
+    if n_procs == 1:
+        return [create_file_(image) for image in images_list]
+    with Pool(processes=n_procs) as pool:
         output_file_treated = pool.map(create_file_, images_list)
-
     return output_file_treated
 
 
-def create_file(image, modality, bids_dir, mod_to_update):
-    """
-    Image file is created at the corresponding output folder
-    as result of image conversion (DICOM to NIFTI) and centering,
-    as specified for each modality
+def _get_images_with_suffix(
+    folder: Path,
+    suffixes: Iterable[str],
+) -> Iterable[Path]:
+    import re
 
-    Args:
-        image: Image metadata
-        modality: Imaging modality
-        bids_dir: Path to the output BIDS directory
-        mod_to_update: If True, pre-existing images in the BIDS directory will be erased and extracted again.
+    if suffixes:
+        rgx = re.compile(r"|".join(suffixes))
+        images = list(filter(rgx.search, [f.name for f in folder.iterdir()]))
+        return [folder / image for image in images]
+    return []
 
-    Returns:
-        [Returns]
+
+def _remove_existing_images_if_necessary(
+    folder: Path,
+    suffixes: Iterable[str],
+    mod_to_update: bool = False,
+) -> bool:
+    """Returns whether it was possible to delete the existing images or not."""
+    from clinica.utils.stream import cprint
+
+    images_to_remove = _get_images_with_suffix(folder, suffixes)
+    if not images_to_remove:
+        return True
+    elif mod_to_update:
+        cprint(f"Removing old images : {images_to_remove}", lvl="info")
+        for path_to_unlink in images_to_remove:
+            (path_to_unlink).unlink()
+        return True
+    cprint(
+        f"There already exist images : {images_to_remove}. "
+        "The parameter 'mod_to_update' is set to False so that "
+        "they cannot be overwritten.",
+        lvl="warning",
+    )
+    return False
+
+
+def _remove_files_with_unsupported_suffixes(
+    folder: Path, suffixes: Iterable[str]
+) -> Iterable[Path]:
+    from clinica.utils.stream import cprint
+
+    invalid_suffix_images = _get_images_with_suffix(folder, suffixes)
+    for image_to_remove in invalid_suffix_images:
+        cprint(
+            f"Image with bad suffix {', '.join(suffixes)} was generated by dcm2nix. These are not"
+            f"supported by Clinica so the image will NOT be converted.",
+            lvl="warning",
+        )
+        cprint(f"Removing image {folder / image_to_remove}", lvl="info")
+        (folder / image_to_remove).unlink()
+    return [folder / image for image in invalid_suffix_images]
+
+
+def _create_file(
+    image: pd.Series,
+    modality: ADNIModalityConverter,
+    bids_dir: Path,
+    mod_to_update: bool,
+) -> Optional[Path]:
+    """Creates an image file at the corresponding output folder.
+
+    The image file is the result of image conversion (DICOM to NIFTI)
+    and centering, as specified for each modality
+
+    Parameters
+    ----------
+    image : pd.Series
+        The image metadata.
+
+    modality : str
+        Imaging modality.
+
+    bids_dir : Path
+        The path to the output BIDS directory.
+
+    mod_to_update : bool
+        If True, pre-existing images in the BIDS directory will be
+        erased and extracted again.
+
+    Returns
+    -------
+    output_image : Path
+        The path to the output image created.
+        If the conversion wasn't successful, this function returns None.
     """
     import os
     import re
     import shutil
-    from glob import glob
-    from os import path
 
-    from numpy import nan
+    import numpy as np
 
-    from clinica.iotools.bids_utils import run_dcm2niix
+    from clinica.cmdline import setup_clinica_logging
+    from clinica.iotools.bids_utils import StudyName, bids_id_factory, run_dcm2niix
+    from clinica.iotools.converter_utils import viscode_to_session
     from clinica.iotools.utils.data_handling import center_nifti_origin
-    from clinica.utils.pet import Tracer
-    from clinica.utils.stream import cprint
+    from clinica.utils.stream import cprint, log_and_raise, log_and_warn
 
-    modality_specific = {
-        "t1": {
-            "output_path": "anat",
-            "output_filename": "_T1w",
-            "to_center": True,
-            "json": "n",
-        },
-        "dwi": {
-            "output_path": "dwi",
-            "output_filename": "_dwi",
-            "to_center": False,
-            "json": "y",
-        },
-        "flair": {
-            "output_path": "anat",
-            "output_filename": "_FLAIR",
-            "to_center": True,
-            "json": "y",
-        },
-        "fmri": {
-            "output_path": "func",
-            "output_filename": "_task-rest_bold",
-            "to_center": False,
-            "json": "y",
-        },
-        "fdg": {
-            "output_path": "pet",
-            "output_filename": f"_trc-{Tracer.FDG}_pet",
-            "to_center": True,
-            "json": "n",
-        },
-        "pib": {
-            "output_path": "pet",
-            "output_filename": f"_trc-{Tracer.PIB}_pet",
-            "to_center": True,
-            "json": "n",
-        },
-        "av45": {
-            "output_path": "pet",
-            "output_filename": f"_trc-{Tracer.AV45}_pet",
-            "to_center": True,
-            "json": "n",
-        },
-        "fbb": {
-            "output_path": "pet",
-            "output_filename": f"_trc-{Tracer.FBB}_pet",
-            "to_center": True,
-            "json": "n",
-        },
-        "tau": {
-            "output_path": "pet",
-            "output_filename": f"_trc-{Tracer.AV1451}_pet",
-            "to_center": True,
-            "json": "n",
-        },
-    }
+    # This function is executed in a multiprocessing context
+    # such that we need to re-configure the clinica logger in the child processes.
+    # Note that logging messages could easily be lost (for example when logging
+    # to a file from two different processes). A better solution would be to
+    # implement a logging process consuming logging messages from a multiprocessing.Queue...
+    setup_clinica_logging("INFO")
 
     subject = image.Subject_ID
     viscode = image.VISCODE
 
-    if modality == "av45_fbb":
-        modality = image.Tracer.lower()
-
+    image_tracer = None
+    logging_header = f"[{modality.value}]"
+    if modality == ADNIModalityConverter.PET_AV45:
+        image_tracer = Tracer(image.Tracer)
+        logging_header = f"[{modality.value} - {image_tracer.value}]"
     if not image.Path:
+        # todo : check for message redundancy
         cprint(
-            msg=(
-                f"[{modality.upper()}] No path specified for {subject} "
-                f"in session {viscode}"
-            ),
+            f"{logging_header} No path specified for {subject} in session {viscode}",
             lvl="info",
         )
-        return nan
-    else:
-        cprint(
-            msg=(
-                f"[{modality.upper()}] Processing subject {subject}"
-                f"in session {viscode}"
-            ),
-            lvl="info",
-        )
-
+        return None
+    cprint(
+        f"{logging_header} Processing subject {subject} in session {viscode}",
+        lvl="info",
+    )
     session = viscode_to_session(viscode)
-
-    image_path = image.Path
+    image_path = Path(image.Path)
     image_id = image.Image_ID
-    # If the original image is a DICOM, check if contains two DICOM
-    # inside the same folder
+    # If the original image is a DICOM, check if contains two DICOM inside the same folder
     if image.Is_Dicom:
-        image_path = check_two_dcm_folder(image_path, bids_dir, image_id)
-    bids_subj = subject.replace("_", "")
-    output_path = path.join(
-        bids_dir,
-        "sub-ADNI" + bids_subj,
-        session,
-        modality_specific[modality]["output_path"],
-    )
+        image_path = _check_two_dcm_folder(image_path, bids_dir, image_id)
+    bids_id = bids_id_factory(StudyName.ADNI).from_original_study_id(subject)
+    output_path = bids_dir / bids_id / session / _get_output_path(modality)
     output_filename = (
-        "sub-ADNI"
-        + bids_subj
-        + "_"
-        + session
-        + modality_specific[modality]["output_filename"]
+        f"{bids_id}_{session}{_get_output_filename(modality, image_tracer)}"
     )
+    output_path.mkdir(parents=True, exist_ok=True)
 
-    # If updated mode is selected, check if an old image is existing and remove it
-    existing_im = glob(path.join(output_path, output_filename + "*"))
-    if mod_to_update and len(existing_im) > 0:
-        print("Removing the old image...")
-        for im in existing_im:
-            os.remove(im)
+    # Check if old images exist and if updated mode is set to TRUE remove them
+    if not _remove_existing_images_if_necessary(
+        output_path,
+        (_get_output_filename(modality, image_tracer), "magnitude", "phase"),
+        mod_to_update,
+    ):
+        return None
 
-    if mod_to_update or not len(existing_im) > 0:
+    file_without_extension = output_path / output_filename
+    output_image = file_without_extension.with_suffix(".nii.gz")
 
-        try:
-            os.makedirs(output_path)
-        except OSError:
-            # Folder already created with previous instance
-            pass
-
-        generate_json = modality_specific[modality]["json"]
-        if modality_specific[modality]["to_center"]:
-            zip_image = "n"
-        else:
-            zip_image = "y"
-
-        if image.Is_Dicom:
-            run_dcm2niix(
-                input_dir=image_path,
-                output_dir=output_path,
-                output_fmt=output_filename,
-                compress=True if zip_image == "y" else False,
-                bids_sidecar=True if generate_json == "y" else False,
+    if image.Is_Dicom:
+        success = run_dcm2niix(
+            input_dir=image_path
+            if modality != ADNIModalityConverter.FMAP
+            else Path(image_path).parent,
+            output_dir=output_path,
+            output_fmt=output_filename,
+            compress=not _should_be_centered(modality),
+            bids_sidecar=_write_json_sidecar(modality),
+        )
+        if not success:
+            log_and_warn(
+                f"{logging_header} Error converting image {image_path} for subject {subject} and session {session}",
+                UserWarning,
             )
 
-            # If "_t" - the trigger delay time - exists in dcm2niix output filename, we remove it
-            exception_t = glob(path.join(output_path, output_filename + "_t[0-9]*"))
-            for trigger_time in exception_t:
-                res = re.search(r"_t\d+\.", trigger_time)
-                no_trigger_time = trigger_time.replace(
-                    trigger_time[res.start() : res.end()], "."
-                )
-                os.rename(trigger_time, no_trigger_time)
+        # If "_t" - the trigger delay time - exists in dcm2niix output filename, we remove it
+        for trigger_time in output_path.glob(f"{output_filename}_t[0-9]*"):
+            res = re.search(r"_t\d+\.", str(trigger_time))
+            no_trigger_time = str(trigger_time).replace(
+                trigger_time[res.start() : res.end()], "."
+            )
+            os.rename(trigger_time, no_trigger_time)
 
-            # Removing ADC images if one is generated
-            adc_image = path.join(output_path, output_filename + "_ADC.nii.gz")
-            if os.path.exists(adc_image):
-                os.remove(adc_image)
+        # Removing images with unsupported suffixes if generated by dcm2niix
+        # todo : maybe later use output to remind user what failed
+        _remove_files_with_unsupported_suffixes(
+            output_path, ("ADC", "real", "imaginary")
+        )
 
-            nifti_file = path.join(output_path, output_filename + ".nii")
-            output_image = nifti_file + ".gz"
+        # Conditions to check if output NIFTI files exists,
+        # and, if DWI, if .bvec and .bval files are also present
+        nifti_exists = (
+            file_without_extension.with_suffix(".nii").is_file()
+            or output_image.is_file()
+        )
+        if modality == ADNIModalityConverter.FMAP:
+            nifti_exists = nifti_exists or any(
+                [
+                    file_without_extension.with_name(
+                        f"{file_without_extension.name}_{suffix}.nii.gz"
+                    ).is_file()
+                    for suffix in {"ph", "e2", "e1", "e2_ph", "e1_ph"}
+                ]
+            )
+        dwi_bvec_and_bval_exist = not (modality == ADNIModalityConverter.DWI) or (
+            file_without_extension.with_suffix(".bvec").is_file()
+            and file_without_extension.with_suffix(".bval").is_file()
+        )
 
-            # Conditions to check if output NIFTI files exists,
-            # and, if DWI, if .bvec and .bval files are also present
-            nifti_exists = path.isfile(nifti_file) or path.isfile(output_image)
-            dwi_bvec_and_bval_exist = not (modality == "dwi") or (
-                path.isfile(path.join(output_path, output_filename + ".bvec"))
-                and path.isfile(path.join(output_path, output_filename + ".bval"))
+        # Check if conversion worked (output files exist)
+        if not nifti_exists or not dwi_bvec_and_bval_exist:
+            log_and_warn(
+                f"{logging_header} Conversion with dcm2niix failed for subject {subject} and session {session}",
+                UserWarning,
+            )
+            return np.nan
+
+        # Case when JSON file was expected, but not generated by dcm2niix
+        json_exists = file_without_extension.with_suffix(".json").exists()
+
+        if modality == ADNIModalityConverter.FMAP:
+            json_exists = json_exists or any(
+                [
+                    file_without_extension.with_name(
+                        f"{file_without_extension.name}_{suffix}.json"
+                    ).is_file()
+                    for suffix in {"ph", "e2", "e1", "e2_ph", "e1_ph"}
+                ]
             )
 
-            # Check if conversion worked (output files exist)
-            if not nifti_exists or not dwi_bvec_and_bval_exist:
-                cprint(
-                    msg=f"Conversion with dcm2niix failed for subject {subject} and session {session}",
-                    lvl="warning",
+        if _write_json_sidecar(modality) and not json_exists:
+            log_and_warn(
+                f"{logging_header} JSON file not generated by dcm2niix for subject {subject} and session {session}",
+                UserWarning,
+            )
+        if _should_be_centered(modality):
+            try:
+                output_image = center_nifti_origin(
+                    file_without_extension.with_suffix(".nii"), output_image
                 )
-                return nan
-
-            # Case when JSON file was expected, but not generated by dcm2niix
-            elif generate_json == "y" and not os.path.exists(
-                path.join(output_path, output_filename + ".json")
-            ):
-                cprint(
-                    msg=f"JSON file not generated by dcm2niix for subject {subject} and session {session}",
-                    lvl="warning",
+            except Exception as e:
+                log_and_raise(str(e), ValueError)
+            file_without_extension.with_suffix(".nii").unlink()
+    else:
+        if _should_be_centered(modality):
+            try:
+                output_image = center_nifti_origin(image_path, output_image)
+            except Exception as e:
+                log_and_raise(
+                    (
+                        f"For subject {subject} in session {session}, "
+                        f"an error occurred whilst recentering Nifti image: {image_path}"
+                        f"The error is: {e}"
+                    ),
+                    ValueError,
                 )
-
-            if modality_specific[modality]["to_center"]:
-                center_nifti_origin(nifti_file, output_image)
-                os.remove(nifti_file)
-
         else:
-            output_image = path.join(output_path, output_filename + ".nii.gz")
-            if modality_specific[modality]["to_center"]:
-                center_nifti_origin(image_path, output_image)
-                if not output_image:
-                    cprint(
-                        msg=(
-                            f"For subject {subject} in session {session}, "
-                            f"an error occurred whilst recentering Nifti image: {image_path}"
-                        ),
-                        lvl="error",
-                    )
-            else:
-                shutil.copy(image_path, output_image)
+            shutil.copy(image_path, output_image)
 
-        # Check if there is still the folder tmp_dcm_folder and remove it
-        remove_tmp_dmc_folder(bids_dir, image_id)
-        return output_image
-
-    else:
-        return nan
+    # Check if there is still the folder tmp_dcm_folder and remove it
+    _remove_tmp_dmc_folder(bids_dir, image_id)
+    return output_image
 
 
-def viscode_to_session(viscode):
-    """Replace the session label 'bl' with 'M00' or capitalize the session name passed as input.
+def _get_output_path(modality: ADNIModalityConverter) -> str:
+    if modality == ADNIModalityConverter.T1:
+        return "anat"
+    if modality == ADNIModalityConverter.DWI:
+        return "dwi"
+    if modality == ADNIModalityConverter.FLAIR:
+        return "anat"
+    if modality == ADNIModalityConverter.FMRI:
+        return "func"
+    if modality == ADNIModalityConverter.FMAP:
+        return "fmap"
+    if modality in (
+        ADNIModalityConverter.PET_FDG,
+        ADNIModalityConverter.PET_FDG_UNIFORM,
+        ADNIModalityConverter.PET_PIB,
+        ADNIModalityConverter.PET_AV45,
+        ADNIModalityConverter.PET_TAU,
+    ):
+        return "pet"
 
-    Args:
-        viscode: session name
 
-    Returns:
-        M00 if is the baseline session or the original session name capitalized
+def _get_output_filename(
+    modality: ADNIModalityConverter, tracer: Optional[Tracer] = None
+) -> str:
+    if modality == ADNIModalityConverter.T1:
+        return "_T1w"
+    if modality == ADNIModalityConverter.DWI:
+        return "_dwi"
+    if modality == ADNIModalityConverter.FLAIR:
+        return "_FLAIR"
+    if modality == ADNIModalityConverter.FMRI:
+        return "_task-rest_bold"
+    if modality == ADNIModalityConverter.FMAP:
+        return "_fmap"
+    if modality == ADNIModalityConverter.PET_FDG:
+        return f"_trc-{Tracer.FDG.value}_rec-{ReconstructionMethod.CO_REGISTERED_AVERAGED.value}_pet"
+    if modality == ADNIModalityConverter.PET_FDG_UNIFORM:
+        return f"_trc-{Tracer.FDG.value}_rec-{ReconstructionMethod.COREGISTERED_ISOTROPIC.value}_pet"
+    if modality == ADNIModalityConverter.PET_PIB:
+        return f"_trc-{Tracer.PIB.value}_pet"
+    if modality == ADNIModalityConverter.PET_AV45:
+        return f"_trc-{tracer.value}_pet"
+    if modality == ADNIModalityConverter.PET_TAU:
+        return f"_trc-{Tracer.AV1451.value}_pet"
+
+
+def _should_be_centered(modality: ADNIModalityConverter) -> bool:
+    if modality == ADNIModalityConverter.T1:
+        return True
+    if modality == ADNIModalityConverter.DWI:
+        return False
+    if modality == ADNIModalityConverter.FLAIR:
+        return True
+    if modality == ADNIModalityConverter.FMRI:
+        return False
+    if modality == ADNIModalityConverter.FMAP:
+        return False
+    if modality in (
+        ADNIModalityConverter.PET_FDG,
+        ADNIModalityConverter.PET_FDG_UNIFORM,
+        ADNIModalityConverter.PET_PIB,
+        ADNIModalityConverter.PET_AV45,
+        ADNIModalityConverter.PET_TAU,
+    ):
+        return True
+
+
+def _write_json_sidecar(modality: ADNIModalityConverter) -> bool:
+    if modality == ADNIModalityConverter.T1:
+        return False
+    if modality == ADNIModalityConverter.DWI:
+        return True
+    if modality == ADNIModalityConverter.FLAIR:
+        return True
+    if modality == ADNIModalityConverter.FMRI:
+        return True
+    if modality == ADNIModalityConverter.FMAP:
+        return True
+    if modality in (
+        ADNIModalityConverter.PET_FDG,
+        ADNIModalityConverter.PET_FDG_UNIFORM,
+        ADNIModalityConverter.PET_PIB,
+        ADNIModalityConverter.PET_AV45,
+        ADNIModalityConverter.PET_TAU,
+    ):
+        return False
+
+
+def _session_label_to_viscode(session_name: str) -> str:
+    """Replace the session name passed as input with the session label 'bl' or 'mXXX'.
+
+    Parameters
+    ----------
+    session_name: str
+        Name of the session (MXXX).
+
+    Returns
+    -------
+    str:
+        'bl' if is the baseline session or the original session name.
     """
-    if viscode == "bl" or viscode == "m0":
-        return "ses-M00"
-    else:
-        return "ses-" + viscode.capitalize()
-
-
-def session_to_viscode(session_name):
-    """Replace the session label 'bl' with 'M00' or capitalize the session name passed as input.
-
-    Args:
-        session_name: MXX
-
-    Returns:
-        M00 if is the baseline session or the original session name capitalized
-    """
-    if session_name == "M00":
+    if session_name == "M000":
         return "bl"
-    else:
-        return session_name.lower()
+    return f"m{(int(session_name[1:])):02d}"
 
 
-def check_two_dcm_folder(dicom_path, bids_folder, image_uid):
+def _check_two_dcm_folder(dicom_path: Path, bids_folder: Path, image_uid: str) -> Path:
     """[summary].
 
     Check if a folder contains more than one DICOM and if yes, copy the DICOM related to
     image id passed as parameter into a temporary folder called tmp_dicom_folder.
 
-    Args:
-        dicom_path (str): path to the DICOM folder
-        bids_folder (str): path to the BIDS folder where the dataset will be stored
-        image_uid (str): image id of the fMRI
+    Parameters
+    ----------
+    dicom_path : Path
+        The path to the DICOM folder.
 
-    Returns:
-        str: path to the original DICOM folder or the path to a temporary folder called
-            tmp_dicom_folder where only the DICOM to convert is copied
+    bids_folder : Path
+        The path to the BIDS folder where the dataset will be stored.
+
+    image_uid : str
+        The image id of the fMRI.
+
+    Returns
+    -------
+    Path :
+        The path to the original DICOM folder or the path to a temporary folder called
+        tmp_dicom_folder where only the DICOM to convert is copied.
     """
-    import os
     import shutil
-    from glob import glob
-    from os import path
     from shutil import copy
 
-    temp_folder_name = f"tmp_dcm_folder_{str(image_uid).strip(' ')}"
-    dest_path = path.join(bids_folder, temp_folder_name)
-
+    dest_path = bids_folder / f"tmp_dcm_folder_{image_uid.strip(' ')}"
     # Check if there are dicom files inside the folder not belonging to the desired image
-    dicom_list = glob(path.join(dicom_path, "*.dcm"))
-    image_list = glob(path.join(dicom_path, f"*{image_uid}.dcm"))
+    dicom_list = [f for f in dicom_path.glob("*.dcm")]
+    image_list = [f for f in dicom_path.glob(f"*{image_uid}.dcm")]
     if len(dicom_list) != len(image_list):
-
         # Remove the precedent tmp_dcm_folder if present.
-        if os.path.exists(dest_path):
+        if dest_path.exists():
             shutil.rmtree(dest_path)
-        os.mkdir(dest_path)
-        dmc_to_conv = glob(path.join(dicom_path, f"*{str(image_uid)}.dcm*"))
-        for d in dmc_to_conv:
+        dest_path.mkdir(parents=True)
+        for d in dicom_path.glob(f"*{str(image_uid)}.dcm*"):
             copy(d, dest_path)
         return dest_path
-    else:
-        return dicom_path
+    return dicom_path
 
 
-def remove_tmp_dmc_folder(bids_dir, image_id):
+def _remove_tmp_dmc_folder(bids_dir: Path, image_id: str):
     """Remove the folder tmp_dmc_folder created by the method check_two_dcm_folder (if existing).
 
     Args:
         bids_dir: path to the BIDS directory
         image_id:
     """
-    from os.path import exists, join
     from shutil import rmtree
 
-    tmp_dcm_folder_path = join(bids_dir, f"tmp_dcm_folder_{str(image_id).strip(' ')}")
-    if exists(tmp_dcm_folder_path):
+    tmp_dcm_folder_path = bids_dir / f"tmp_dcm_folder_{image_id.strip(' ')}"
+    if tmp_dcm_folder_path.exists():
         rmtree(tmp_dcm_folder_path)
+
+
+def load_clinical_csv(clinical_dir: Path, filename: str) -> pd.DataFrame:
+    """Load the clinical csv from ADNI. This function is able to find the csv in the
+    different known format available, the old format with just the name, and the new
+    format with the name and the date of download.
+
+    Parameters
+    ----------
+    clinical_dir: str
+        Directory containing the csv.
+
+    filename: str
+        name of the file without the suffix.
+
+    Returns
+    -------
+    pd.DataFrame:
+        Dataframe corresponding to the filename.
+    """
+    import re
+
+    pattern = filename + r"(_\d{1,2}[A-Za-z]{3}\d{4})?.csv"
+    files_matching_pattern = [
+        f for f in clinical_dir.rglob("*.csv") if re.search(pattern, f.name)
+    ]
+    if len(files_matching_pattern) != 1:
+        raise IOError(
+            f"Expecting to find exactly one file in folder {clinical_dir} "
+            f"matching pattern {pattern}. {len(files_matching_pattern)} "
+            f"files were found instead : \n{'- '.join(str(files_matching_pattern))}"
+        )
+    try:
+        return pd.read_csv(files_matching_pattern[0], sep=",", low_memory=False)
+    except Exception:
+        raise ValueError(
+            f"File {str(files_matching_pattern[0])} was found but could not "
+            "be loaded as a DataFrame. Please check your data."
+        )

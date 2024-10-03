@@ -15,7 +15,6 @@ from clinica.utils.stream import cprint
 
 class CAPSInput(base.MLInput):
     def __init__(self, input_params):
-
         super().__init__(input_params)
 
         self._images = None
@@ -40,7 +39,7 @@ class CAPSInput(base.MLInput):
             )
 
         if self._input_params["precomputed_kernel"] is not None:
-            if type(self._input_params["precomputed_kernel"]) == np.ndarray:
+            if isinstance(self._input_params["precomputed_kernel"], np.ndarray):
                 if self._input_params["precomputed_kernel"].shape == (
                     len(self._subjects),
                     len(self._subjects),
@@ -124,7 +123,6 @@ class CAPSInput(base.MLInput):
 
     @staticmethod
     def get_default_parameters():
-
         parameters_dict = {}
         parameters_dict.setdefault("caps_directory", None)
         parameters_dict.setdefault("subjects_visits_tsv", None)
@@ -138,7 +136,6 @@ class CAPSInput(base.MLInput):
 
 class CAPSVoxelBasedInput(CAPSInput):
     def __init__(self, input_params):
-
         super().__init__(input_params)
 
         self._orig_shape = None
@@ -223,7 +220,6 @@ class CAPSVoxelBasedInput(CAPSInput):
         return self._x
 
     def save_weights_as_nifti(self, weights, output_dir):
-
         if self._images is None:
             self.get_images()
 
@@ -233,7 +229,6 @@ class CAPSVoxelBasedInput(CAPSInput):
 
     @staticmethod
     def get_default_parameters():
-
         parameters_dict = super(
             CAPSVoxelBasedInput, CAPSVoxelBasedInput
         ).get_default_parameters()
@@ -253,15 +248,10 @@ class CAPSVoxelBasedInput(CAPSInput):
 
 class CAPSRegionBasedInput(CAPSInput):
     def __init__(self, input_params):
-        from clinica.utils.atlas import VOLUME_ATLASES
+        from clinica.utils.atlas import AtlasName
 
         super().__init__(input_params)
-
-        if self._input_params["atlas"] not in VOLUME_ATLASES:
-            raise ValueError(
-                f"Incorrect atlas name (given value: {self._input_params['atlas']}). "
-                f"It must be one of {VOLUME_ATLASES}"
-            )
+        AtlasName(self._input_params["atlas"])
 
     def get_images(self):
         """
@@ -306,9 +296,9 @@ class CAPSRegionBasedInput(CAPSInput):
                     "preprocessing",
                     f"group-{self._input_params['group_label']}",
                     "atlas_statistics",
-                    f"{self._subjects[i]}_{self._sessions[i]}_trc-{self._input_params['acq_label']}_pet"
+                    f"{self._subjects[i]}_{self._sessions[i]}_trc-{self._input_params['acq_label'].value}_pet"
                     f"_space-{self._input_params['atlas']}{pvc_key_value}"
-                    f"_suvr-{self._input_params['suvr_reference_region']}_statistics.tsv",
+                    f"_suvr-{self._input_params['suvr_reference_region'].value}_statistics.tsv",
                 )
                 for i in range(len(self._subjects))
             ]
@@ -369,12 +359,11 @@ class CAPSRegionBasedInput(CAPSInput):
 
 class CAPSVertexBasedInput(CAPSInput):
     def __init__(self, input_params):
-
         super().__init__(input_params)
 
     def get_images(self):
         """
-        returns list of filnames
+        returns list of filenames
         """
         import os
 
@@ -394,8 +383,8 @@ class CAPSVertexBasedInput(CAPSInput):
                             self._sessions[i],
                             "pet",
                             "surface",
-                            f"{self._subjects[i]}_{self._sessions[i]}_trc-{self._input_params['acq_label']}_pet"
-                            f"_space-fsaverage_suvr-{self._input_params['suvr_reference_region']}"
+                            f"{self._subjects[i]}_{self._sessions[i]}_trc-{self._input_params['acq_label'].value}_pet"
+                            f"_space-fsaverage_suvr-{self._input_params['suvr_reference_region'].value}"
                             f"_pvc-iy_hemi-{h}_fwhm-{self._input_params['fwhm']}_projection.mgh",
                         )
                         for h in hemi
@@ -534,7 +523,6 @@ class CAPSTSVBasedInput(CAPSInput):
 
     @staticmethod
     def get_default_parameters():
-
         parameters_dict = super(
             CAPSTSVBasedInput, CAPSTSVBasedInput
         ).get_default_parameters()
@@ -591,8 +579,8 @@ class CAPSVoxelBasedInputREGSVM(CAPSVoxelBasedInput):
                     "pet",
                     "preprocessing",
                     f"group-{self._input_params['group_label']}",
-                    f"{self._subjects[i]}_{self._sessions[i]}_trc-{self._input_params['acq_label']}_pet"
-                    f"_space-Ixi549Space{pvc_key_value}_suvr-{self._input_params['suvr_reference_region']}"
+                    f"{self._subjects[i]}_{self._sessions[i]}_trc-{self._input_params['acq_label'].value}_pet"
+                    f"_space-Ixi549Space{pvc_key_value}_suvr-{self._input_params['suvr_reference_region'].value}"
                     f"_mask-brain{fwhm_key_value}_pet.nii.gz",
                 )
                 for i in range(len(self._subjects))
@@ -611,7 +599,6 @@ class CAPSVoxelBasedInputREGSVM(CAPSVoxelBasedInput):
 
 class TsvInput(base.MLInput):
     def __init__(self, input_params):
-
         super().__init__(input_params)
 
         import pandas as pd
@@ -650,7 +637,6 @@ class TsvInput(base.MLInput):
 
     @staticmethod
     def get_default_parameters():
-
         parameters_dict = {}
         parameters_dict.setdefault("data_tsv", None)
         parameters_dict.setdefault("columns", None)

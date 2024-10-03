@@ -25,7 +25,7 @@ where:
 
 - `CAPS_DIRECTORY` is the output folder containing the results in a [CAPS](../../CAPS/Introduction) hierarchy
 - `GROUP_LABEL` is the user-defined identifier for the provided group of subjects
-- The third positional argument can be `t1-volume` to use tissue maps or `pet-volume` to use standardized uptake value ratio (SUVR) maps.
+- The third positional argument can be `t1-volume` to use tissue maps or `pet-volume` to use [SUVR](../glossary.md#suvr) maps.
 
 Pipeline options if you use inputs from the `pet-volume` pipeline:
 
@@ -56,7 +56,7 @@ SVM regularization that accounts for the spatial and anatomical structure of neu
 SVM regularization of PET data that accounts for the spatial and anatomical structure of neuroimaging data.
 
 !!! note
-    The full list of output files can be found in the [The ClinicA Processed Structure (CAPS) specifications](../../CAPS/Specifications/#machinelearning-prepare-spatial-svm-prepare-input-data-for-spatially-regularized-svm).
+    The full list of output files can be found in [The ClinicA Processed Structure (CAPS) specifications](../../CAPS/Specifications/#machinelearning-prepare-spatial-svm-prepare-input-data-for-spatially-regularized-svm).
 
 ## Going further
 

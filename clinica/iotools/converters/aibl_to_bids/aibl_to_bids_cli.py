@@ -1,5 +1,8 @@
+from typing import Optional
+
 import click
 
+from clinica import option
 from clinica.iotools.converters import cli_param
 
 
@@ -13,36 +16,28 @@ from clinica.iotools.converters import cli_param
     is_flag=True,
     help="Overwrites previously written nifti and json files.",
 )
+@option.global_option_group
+@option.n_procs
 def cli(
     dataset_directory: str,
     clinical_data_directory: str,
     bids_directory: str,
     clinical_data_only: bool = False,
     overwrite: bool = False,
+    n_procs: Optional[int] = None,
 ) -> None:
     """AIBL to BIDS converter.
 
     Convert the imaging and clinical data of AIBL (https://aibl.csiro.au/adni/index.html), located in DATASET_DIRECTORY
     and CLINICAL_DATA_DIRECTORY respectively, to a BIDS dataset in the target BIDS_DIRECTORY.
     """
-    from os import makedirs
+    from clinica.iotools.converters.aibl_to_bids.aibl_to_bids import convert
 
-    from clinica.iotools.converters.aibl_to_bids.aibl_to_bids import (
-        convert_clinical_data,
-        convert_images,
+    convert(
+        dataset_directory,
+        bids_directory,
+        clinical_data_directory,
+        overwrite=overwrite,
+        clinical_data_only=clinical_data_only,
+        n_procs=n_procs,
     )
-    from clinica.utils.check_dependency import check_dcm2niix
-
-    check_dcm2niix()
-
-    makedirs(bids_directory, exist_ok=True)
-
-    if not clinical_data_only:
-        convert_images(
-            dataset_directory,
-            clinical_data_directory,
-            bids_directory,
-            overwrite,
-        )
-
-    convert_clinical_data(bids_directory, clinical_data_directory)

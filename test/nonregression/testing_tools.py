@@ -2,10 +2,25 @@
 
 import os
 from os import PathLike
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
+
+
+def configure_paths(
+    base_dir: Path,
+    tmp_path: Path,
+    name: str,
+) -> Tuple[Path, Path, Path]:
+    """Configure paths for tests."""
+    input_dir = base_dir / name / "in"
+    ref_dir = base_dir / name / "ref"
+    tmp_out_dir = tmp_path / name / "out"
+    tmp_out_dir.mkdir(parents=True, exist_ok=False)
+
+    return input_dir, tmp_out_dir, ref_dir
 
 
 def likeliness_measure(
@@ -76,9 +91,10 @@ def similarity_measure(
     file2: PathLike,
     threshold: float,
 ) -> bool:
-    """Compares 2 Nifti inputs using a correlation metric.
+    """Compare two NIfTI inputs using a similarity metric.
 
-    Nifti are equals if the correlation is higher than the specified threshold.
+    Both NIfTI inputs are considered equal if the computed similarity metric
+    is higher than the specified threshold.
 
     Parameters
     ----------
@@ -90,80 +106,149 @@ def similarity_measure(
     -------
     bool
         True if file1 and file2 can be considered similar enough, i.e. the
-        correlation is higher than the threshold.
+        similarity metric is higher than the threshold.
     """
-    import nipype.pipeline.engine as npe
-    from nipype.algorithms.metrics import Similarity
+    from os import fspath
 
-    # Node similarity (nipy required)
-    img_similarity = npe.Node(name="img_similarity", interface=Similarity())
-    img_similarity.inputs.metric = "cc"  # stands for correlation coefficient
-    img_similarity.inputs.volume1 = file1
-    img_similarity.inputs.volume2 = file2
-    res = img_similarity.run()
+    import nibabel
 
-    return np.mean(res.outputs.similarity) > threshold
+    image1 = nibabel.load(fspath(file1)).get_fdata()
+    image2 = nibabel.load(fspath(file2)).get_fdata()
+
+    return similarity_measure_arrays(image1, image2, threshold)
 
 
-def identical_subject_list(
-    sub_ses_list1: PathLike,
-    sub_ses_list2: PathLike,
+def similarity_measure_large_nifti(
+    file1: PathLike,
+    file2: PathLike,
+    threshold: float,
 ) -> bool:
-    """Ensures that both subject_session files are describing the same list.
+    """Compare two NIfTI inputs using a similarity metric.
+
+    Both NIfTI inputs are considered equal if the computed similarity metric
+    is higher than the specified threshold.
+
+    The difference with the function `similarity_measure` is that the two
+    nifti images are compared slice by slice (taken in the last dimension).
+    This allows to compare large 4D volumes that wouldn't fit entirely in
+    memory for example.
 
     Parameters
     ----------
-    sub_ses_list1: Path to first nifti input
-    sub_ses_list2: Path to second nifti to compare
+    file1 : Path
+        The path to first nifti input.
+
+    file2 : Path
+        The path to second nifti to compare.
+
+    threshold : float
+        Threshold value to be used in the comparison.
 
     Returns
     -------
     bool
-        True if sub_ses_list1 and sub_ses_list2 contains the same sessions.
-    """
+        True if file1 and file2 can be considered similar enough, i.e. the
+        similarity metric is higher than the threshold."""
+    from os import fspath
 
-    def is_included(list1: PathLike, list2: PathLike) -> bool:
-        readlist1 = pd.read_csv(list1, sep="\t")
-        readlist2 = pd.read_csv(list2, sep="\t")
+    import nibabel
 
-        # If columns are different, files are different
-        if list(readlist1.columns) != list(readlist2.columns):
+    # Note that nibabel does lazy loading so image1 and 2 are only proxies here
+    image1 = nibabel.load(fspath(file1))
+    image2 = nibabel.load(fspath(file2))
+
+    for volume in range(image1.shape[-1]):
+        if not similarity_measure_arrays(
+            np.asarray(image1.dataobj[..., volume]),
+            np.asarray(image2.dataobj[..., volume]),
+            threshold,
+        ):
             return False
-        else:
+    return True
 
-            # Extract subject and corresponding session names
-            subjects1 = list(readlist1.participant_id)
-            sessions1 = list(readlist1.session_id)
-            subjects2 = list(readlist2.participant_id)
-            sessions2 = list(readlist2.session_id)
 
-            if len(subjects1) != len(subjects2):
-                return False
-            else:
-                for i in range(len(subjects1)):
-                    current_sub = subjects1[i]
-                    current_ses = sessions1[i]
-                    # Compute all the indices in the second list corresponding to the current subject
-                    idx_same_sub = [
-                        j for j in range(len(subjects2)) if subjects2[j] == current_sub
-                    ]
-                    if len(idx_same_sub) == 0:  # Current subject not found in
-                        return False
-                    ses_same_sub = [sessions2[idx] for idx in idx_same_sub]
-                    if current_ses not in ses_same_sub:
-                        return False
-        return True
+def similarity_measure_arrays(
+    array1: np.ndarray,
+    array2: np.ndarray,
+    threshold: float,
+) -> bool:
+    """Returns True if structural similarity between two arrays is larger than threshold.
 
+    See https://scikit-image.org/docs/stable/api/skimage.metrics.html#skimage.metrics.structural_similarity
+    """
+    import numpy as np
+    from skimage.metrics import structural_similarity
+
+    array1 = np.squeeze(array1)
+    array2 = np.squeeze(array2)
+
+    similarity = structural_similarity(
+        array1,
+        array2,
+        gaussian_weights=True,
+        sigma=1.5,
+        use_sample_covariance=False,
+        data_range=array1.max() - array1.min(),
+    )
+
+    return similarity > threshold
+
+
+def compare_subject_session_tsv(
+    sub_ses_tsv_1: PathLike,
+    sub_ses_tsv_2: PathLike,
+) -> bool:
+    """Ensures that both subject_session TSV files are describing the same list of sessions.
+
+    Parameters
+    ----------
+    sub_ses_tsv_1 : Path
+        The path to first subject session TSV file.
+
+    sub_ses_tsv_2: Path
+        The path to second subject session TSV file.
+
+    Returns
+    -------
+    bool
+        True if sub_ses_tsv_1 and sub_ses_tsv_2 contains the same sessions.
+    """
     # The operation is performed both sides because is_included(list1, list2) != is_included(list2, list1)
-    return is_included(sub_ses_list1, sub_ses_list2) & is_included(
-        sub_ses_list2, sub_ses_list1
+    return _is_included(sub_ses_tsv_1, sub_ses_tsv_2) & _is_included(
+        sub_ses_tsv_2, sub_ses_tsv_1
     )
 
 
-def _sort_subject_field(subjects: List, fields: List) -> Tuple:
+def _is_included(sub_ses_tsv_1: PathLike, sub_ses_tsv_2: PathLike) -> bool:
+    df1 = pd.read_csv(sub_ses_tsv_1, sep="\t")
+    df2 = pd.read_csv(sub_ses_tsv_2, sep="\t")
+
+    if list(df1.columns) != list(df2.columns):
+        return False
+    subjects1 = list(df1.participant_id)
+    sessions1 = list(df1.session_id)
+    subjects2 = list(df2.participant_id)
+    sessions2 = list(df2.session_id)
+
+    if len(subjects1) != len(subjects2):
+        return False
+    for i in range(len(subjects1)):
+        current_sub = subjects1[i]
+        current_ses = sessions1[i]
+        # Compute all the indices in the second list corresponding to the current subject
+        idx_same_sub = [j for j in range(len(subjects2)) if subjects2[j] == current_sub]
+        if len(idx_same_sub) == 0:  # Current subject not found in
+            return False
+        ses_same_sub = [sessions2[idx] for idx in idx_same_sub]
+        if current_ses not in ses_same_sub:
+            return False
+    return True
+
+
+def _sort_subject_field(subjects: List, fields: List) -> List:
     """Helper function for `same_missing_modality_tsv`.
     Returns a sorted list of fields. The list is sorted by corresponding
-    subject_id and by field_id if the subject_ids are equal..
+    subject_id and by field_id if the subject_ids are equal.
     """
     return [list(_) for _ in zip(*sorted(zip(subjects, fields)))][1]
 
@@ -189,15 +274,18 @@ def _extract_modality_from_tsv(file: PathLike) -> Dict:
     return sorted_fields
 
 
-def same_missing_modality_tsv(file1: PathLike, file2: PathLike) -> bool:
+def compare_missing_modality_tsv(file1: PathLike, file2: PathLike) -> bool:
     """Compare 2 TSV files generated by the iotool ComputeMissingModalities.
 
     Only fields participant_id, pet, t1w, func_task - rest are compared. Line order does not matter.
 
     Parameters
     ----------
-    file1: Path to first tsv
-    file2: Path to second tsv
+    file1 : Path
+        The path to first tsv.
+
+    file2 : Path
+        The path to second tsv.
 
     Returns
     -------
@@ -299,15 +387,17 @@ def list_files_with_extensions(
 
 def create_list_hashes(
     path_folder: PathLike,
-    extensions_to_keep: Tuple[str] = (".nii.gz", ".tsv", ".json"),
+    extensions_to_keep: Tuple[str, ...] = (".nii.gz", ".tsv", ".json"),
 ) -> Dict:
     """Computes a dictionary of files with their corresponding hashes.
 
     Parameters
     ----------
-    path_folder: Starting point for the tree listing.
-    extensions_to_keep: Files with these extensions will have their
-        hashes computed and tracked.
+    path_folder : Path
+        Starting point for the tree listing.
+
+    extensions_to_keep : tuple of str
+        Files with these extensions will have their hashes computed and tracked.
 
     Returns
     -------

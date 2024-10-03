@@ -2,11 +2,14 @@ from typing import List, Optional
 
 import click
 
+from clinica import option
 from clinica.pipelines import cli_param
+from clinica.pipelines.engine import clinica_pipeline
 
 pipeline_name = "t1-volume-create-dartel"
 
 
+@clinica_pipeline
 @click.command(name=pipeline_name)
 @cli_param.argument.bids_directory
 @cli_param.argument.caps_directory
@@ -14,9 +17,11 @@ pipeline_name = "t1-volume-create-dartel"
 @cli_param.option_group.common_pipelines_options
 @cli_param.option.subjects_sessions_tsv
 @cli_param.option.working_directory
-@cli_param.option.n_procs
+@option.global_option_group
+@option.n_procs
 @cli_param.option_group.advanced_pipeline_options
 @cli_param.option.dartel_tissues
+@cli_param.option.caps_name
 def cli(
     bids_directory: str,
     caps_directory: str,
@@ -25,6 +30,7 @@ def cli(
     subjects_sessions_tsv: Optional[str] = None,
     working_directory: Optional[str] = None,
     n_procs: Optional[int] = None,
+    caps_name: Optional[str] = None,
 ) -> None:
     """Inter-subject registration using Dartel (creating a new Dartel template).
 
@@ -47,6 +53,7 @@ def cli(
         base_dir=working_directory,
         parameters=parameters,
         name=pipeline_name,
+        caps_name=caps_name,
     )
 
     exec_pipeline = (

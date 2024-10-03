@@ -1,7 +1,7 @@
 <!-- markdownlint-disable MD046 -->
 # `oasis3-to-bids` – Conversion of the Open Access Series of Imaging Studies (OASIS-3) to BIDS
 
-!!! quote "Description reproduced from the [OASIS' webpage](http://oasis-brains.org/)"
+!!! quote "Description reproduced from the [OASIS' webpage](https://sites.wustl.edu/oasisbrains/)"
     The Open Access Series of Imaging Studies (OASIS) is a project aimed at making MRI data sets of the brain freely available to the scientific community.
     By compiling and freely distributing MRI data sets, we hope to facilitate future discoveries in basic and clinical neuroscience.
     OASIS is made available by the Washington University Alzheimer’s Disease Research Center, Dr. Randy Buckner at the Howard Hughes Medical Institute (HHMI) at Harvard University, the Neuroinformatics Research Group (NRG) at Washington University School of Medicine, and the Biomedical Informatics Research Network (BIRN).
@@ -17,7 +17,7 @@
      PIB, AV45, and FDG, totaling over 1500 raw imaging scans and the accompanying post-processed files from
       the Pet Unified Pipeline (PUP) are also available in OASIS-3.
 
-  For more information about the images and the dataset you can read the [OASIS-3: Imaging Methods and Data Dictionary](https://www.oasis-brains.org/files/OASIS-3_Imaging_Data_Dictionary_v1.5.pdf).
+  For more information about the images and the dataset you can read the [OASIS-3: Imaging Methods and Data Dictionary](https://bpb-us-w2.wpmucdn.com/sites.wustl.edu/dist/6/4383/files/2024/04/OASIS-3_Imaging_Data_Dictionary_v2.3-a93c947a586e7367.pdf).
 
 ## Dependencies
 
@@ -27,7 +27,9 @@ If you installed the core of Clinica, this converter needs no further dependenci
 
 ### Clinical data
 
-The OASIS-3 to BIDS converter requires the user to have downloaded the OASIS-3 (also called *Longitudinal Neuroimaging, Clinical, and Cognitive Dataset for Normal Aging and Alzheimer’s Disease*) imaging and clinical data. To do so, visit the [OASIS website](http://www.oasis-brains.org/), click on `DATASETS` then `OASIS-3`. For the first access, you have to scroll down to click on `Apply To Access OASIS Data` in the bottom of the next "Data Use Agreement" section and follow the procedure. Then, you can download the data via XNAT (if you click on `Browse Data`).
+The OASIS-3 to BIDS converter requires the user to have downloaded the OASIS-3 (also called *Longitudinal Neuroimaging, Clinical, and Cognitive Dataset for Normal Aging and Alzheimer’s Disease*) imaging and clinical data.
+
+To do so, visit the [OASIS website](https://sites.wustl.edu/oasisbrains/), click on `DATASETS` then `OASIS-3`. For the first access, you have to scroll down to click on `Apply To Access OASIS Data` in the bottom of the next "Data Use Agreement" section and follow the procedure. Then, you can download the data via XNAT (if you click on `Browse Data`).
 
 The data needs to be formatted before downloading by following the step-by-step procedure below.
 
@@ -77,7 +79,7 @@ The data needs to be formatted before downloading by following the step-by-step 
 
 To download the images of the OASIS-3 dataset:
 
-1. From the page on which you were to donwload the clinical date, click on "Download Images" button. You will have a download interface with different options, such as shown below.
+1. From the page on which you were to download the clinical date, click on "Download Images" button. You will have a download interface with different options, such as shown below.
 
 <img width="959" alt="Screenshot 2021-07-15 at 10 48 45" src="https://user-images.githubusercontent.com/85217698/125761542-bfcfb824-af4f-4e0d-b597-510418986313.png">
 
@@ -87,21 +89,28 @@ To download the images of the OASIS-3 dataset:
 
     a. For the "Scan Format" select *both* BIDS and NIFTI. Otherwise, you will be missing data.
     
-    b. For the "Scan Types", select only T1w and pet, since it is the only format converted right now.
+    b. For the "Scan Types", select only the modalities you desire. Do note that if it is not amongst the modality handled by this converter, it will not be converted.
     
-    c. For the "Additionnal Ressources", select BIDS.
+    c. For the "Additional Resources", select BIDS.
     
     d. For the "Assessments", do not select anything.
+
+    e. For the "Download Data", select "Simplify downloaded archive structure" and not the other options.
     
 4. Click submit to download. We advise that you use the XNAT Desktop Client which will be more efficient than download through your web browser.
 
 ## Supported modalities
 
-Please note that this converter only processes T1-weighted MRI images and the clinical data. Support for additional
-modalities may be implemented later.
+Please note that this converter currently processes the clinical data and the following modalities : 
+- T1W
+- T2star
+- Flair
+- DWI
+- [PET](../glossary.md#pet) 
 
-For participants with multiple T1-weighted images available, the average of the motion-corrected co-registered
-individual images resampled to 1-mm isotropic resolution is given priority.
+Support for additional modalities may be implemented later.
+
+For participants with multiple T1-weighted images available, the average of the motion-corrected co-registered individual images resampled to 1-mm isotropic resolution is given priority.
 
 ## Using the converter
 
@@ -161,7 +170,7 @@ where:
 - `BIDS_DIRECTORY` is the path to the output directory where the BIDS-converted version of OASIS-3 will be stored.
 
 !!! note
-    In order to improve the readability, the BIDS subject ID is different from the original OASIS-3 ID and is defined as follows:
+    In order to improve the readability, the [BIDS](../glossary.md#bids) subject ID is different from the original OASIS-3 ID and is defined as follows:
 
     ```Text
     sub-OASIS3+ original numerical ID of the subject

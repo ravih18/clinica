@@ -2,11 +2,14 @@ from typing import Optional
 
 import click
 
+from clinica import option
 from clinica.pipelines import cli_param
+from clinica.pipelines.engine import clinica_pipeline
 
 pipeline_name = "flair-linear"
 
 
+@clinica_pipeline
 @click.command(name=pipeline_name)
 @cli_param.argument.bids_directory
 @cli_param.argument.caps_directory
@@ -17,17 +20,28 @@ pipeline_name = "flair-linear"
     is_flag=True,
     help="Do not crop the image with template (cropped image are suggested for using with DL models)",
 )
+@cli_param.option.random_seed
 @cli_param.option_group.common_pipelines_options
 @cli_param.option.subjects_sessions_tsv
 @cli_param.option.working_directory
-@cli_param.option.n_procs
+@option.global_option_group
+@option.n_procs
+@cli_param.option.option(
+    "--use-antspy",
+    is_flag=True,
+    help="Use ANTsPy instead of ANTs.",
+)
+@cli_param.option.caps_name
 def cli(
     bids_directory: str,
     caps_directory: str,
     uncropped_image: bool = False,
+    random_seed: Optional[int] = None,
     subjects_sessions_tsv: Optional[str] = None,
     working_directory: Optional[str] = None,
     n_procs: Optional[int] = None,
+    use_antspy: bool = False,
+    caps_name: Optional[str] = None,
 ) -> None:
     """Affine registration of Flair images to the MNI standard space.
 
@@ -39,7 +53,10 @@ def cli(
 
     from .anat_linear_pipeline import AnatLinear
 
-    parameters = {"uncropped_image": uncropped_image}
+    parameters = {
+        "uncropped_image": uncropped_image,
+        "random_seed": random_seed,
+    }
 
     # Most of the time, you will want to instantiate your pipeline with a
     # BIDS and CAPS directory as inputs:
@@ -50,6 +67,8 @@ def cli(
         base_dir=working_directory,
         parameters=parameters,
         name=pipeline_name,
+        use_antspy=use_antspy,
+        caps_name=caps_name,
     )
 
     exec_pipeline = (

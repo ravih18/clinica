@@ -1,24 +1,25 @@
-# Use hash instead of parameters for iterables folder names
-# Otherwise path will be too long and generate OSError
+from typing import List
+
 from nipype import config
 
-import clinica.pipelines.engine as cpe
+from clinica.pipelines.engine import Pipeline
 
 cfg = dict(execution={"parameterize_dirs": False})
 config.update_config(cfg)
 
 
-class T1VolumeTissueSegmentation(cpe.Pipeline):
+class T1VolumeTissueSegmentation(Pipeline):
     """T1VolumeTissueSegmentation - Tissue segmentation, bias correction and spatial normalization to MNI space.
 
     Returns:
         A clinica pipeline object containing the T1VolumeTissueSegmentation pipeline.
     """
 
-    def check_custom_dependencies(self):
+    def _check_custom_dependencies(self) -> None:
         """Check dependencies that can not be listed in the `info.json` file."""
+        pass
 
-    def check_pipeline_parameters(self):
+    def _check_pipeline_parameters(self) -> None:
         """Check pipeline parameters."""
         from clinica.utils.spm import get_tpm
 
@@ -27,23 +28,26 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
         self.parameters.setdefault("save_warped_unmodulated", True)
         self.parameters.setdefault("save_warped_modulated", False)
         self.parameters.setdefault("tissue_probability_maps", None)
-
         # Fetch the TPM in case none was passed explicitly.
         if not self.parameters["tissue_probability_maps"]:
             self.parameters["tissue_probability_maps"] = get_tpm()
 
-    def get_input_fields(self):
+    def get_input_fields(self) -> List[str]:
         """Specify the list of possible inputs of this pipeline.
 
-        Returns:
+        Returns
+        -------
+        list of str :
             A list of (string) input fields name.
         """
         return ["t1w"]
 
-    def get_output_fields(self):
+    def get_output_fields(self) -> List[str]:
         """Specify the list of possible outputs of this pipeline.
 
-        Returns:
+        Returns
+        -------
+        list of str :
             A list of (string) output fields name.
         """
         return [
@@ -59,7 +63,7 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
             "t1_mni",
         ]
 
-    def build_input_node(self):
+    def _build_input_node(self):
         """Build and connect an input node to the pipeline.
 
         Raise:
@@ -73,20 +77,18 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
         )
         from clinica.utils.exceptions import ClinicaBIDSError, ClinicaException
         from clinica.utils.input_files import T1W_NII
-        from clinica.utils.inputs import clinica_file_reader
+        from clinica.utils.inputs import clinica_file_filter
         from clinica.utils.stream import cprint
         from clinica.utils.ux import print_images_to_process
 
         # Inputs from anat/ folder
         # ========================
         # T1w file:
-        try:
-            t1w_files, _ = clinica_file_reader(
-                self.subjects, self.sessions, self.bids_directory, T1W_NII
-            )
-        except ClinicaException as e:
-            err = f"Clinica faced error(s) while trying to read files in your BIDS directory.\n{str(e)}"
-            raise ClinicaBIDSError(err)
+        t1w_files, subjects, sessions = clinica_file_filter(
+            self.subjects, self.sessions, self.bids_directory, T1W_NII
+        )
+        self.subjects = subjects
+        self.sessions = sessions
 
         check_volume_location_in_world_coordinate_system(
             t1w_files,
@@ -112,20 +114,20 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
             ]
         )
 
-    def build_output_node(self):
+    def _build_output_node(self):
         """Build and connect an output node to the pipeline."""
+        pass
 
-    def build_core_nodes(self):
+    def _build_core_nodes(self):
         """Build and connect the core nodes of the pipeline."""
         import nipype.interfaces.io as nio
         import nipype.interfaces.spm as spm
         import nipype.interfaces.utility as nutil
         import nipype.pipeline.engine as npe
-        from nipype.algorithms.misc import Gunzip
 
-        from clinica.utils.filemanip import zip_nii
+        from clinica.utils.filemanip import unzip_nii, zip_nii
         from clinica.utils.nipype import container_from_filename, fix_join
-        from clinica.utils.spm import spm_standalone_is_available, use_spm_standalone
+        from clinica.utils.spm import use_spm_standalone_if_available
 
         from .t1_volume_tissue_segmentation_utils import (
             ApplySegmentationDeformation,
@@ -135,10 +137,9 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
             zip_list_files,
         )
 
-        if spm_standalone_is_available():
-            use_spm_standalone()
+        use_spm_standalone_if_available()
 
-        # Get <subject_id> (e.g. sub-CLNC01_ses-M00) from input_node
+        # Get <subject_id> (e.g. sub-CLNC01_ses-M000) from input_node
         # and print begin message
         # =======================
         init_node = npe.Node(
@@ -150,9 +151,12 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
             name="0-InitNode",
         )
 
-        # Unzipping
-        # =========
-        unzip_node = npe.Node(interface=Gunzip(), name="1-UnzipT1w")
+        unzip_node = npe.Node(
+            nutil.Function(
+                input_names=["in_file"], output_names=["out_file"], function=unzip_nii
+            ),
+            name="1-UnzipT1w",
+        )
 
         # Unified Segmentation
         # ====================
@@ -179,10 +183,6 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
             ),
             name="WriteEndMessage",
         )
-
-        # Connection
-        # ==========
-        # fmt: off
         self.connect(
             [
                 (self.input_node, init_node, [("t1w", "t1w")]),
@@ -190,21 +190,30 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
                 (unzip_node, new_segment, [("out_file", "channel_files")]),
                 (init_node, print_end_message, [("subject_id", "subject_id")]),
                 (unzip_node, t1_to_mni, [("out_file", "in_files")]),
-                (new_segment, t1_to_mni, [("forward_deformation_field", "deformation_field")]),
-                (new_segment, self.output_node, [("bias_corrected_images", "bias_corrected_images"),
-                                                 ("bias_field_images", "bias_field_images"),
-                                                 ("dartel_input_images", "dartel_input_images"),
-                                                 ("forward_deformation_field", "forward_deformation_field"),
-                                                 ("inverse_deformation_field", "inverse_deformation_field"),
-                                                 ("modulated_class_images", "modulated_class_images"),
-                                                 ("native_class_images", "native_class_images"),
-                                                 ("normalized_class_images", "normalized_class_images"),
-                                                 ("transformation_mat", "transformation_mat")]),
+                (
+                    new_segment,
+                    t1_to_mni,
+                    [("forward_deformation_field", "deformation_field")],
+                ),
+                (
+                    new_segment,
+                    self.output_node,
+                    [
+                        ("bias_corrected_images", "bias_corrected_images"),
+                        ("bias_field_images", "bias_field_images"),
+                        ("dartel_input_images", "dartel_input_images"),
+                        ("forward_deformation_field", "forward_deformation_field"),
+                        ("inverse_deformation_field", "inverse_deformation_field"),
+                        ("modulated_class_images", "modulated_class_images"),
+                        ("native_class_images", "native_class_images"),
+                        ("normalized_class_images", "normalized_class_images"),
+                        ("transformation_mat", "transformation_mat"),
+                    ],
+                ),
                 (t1_to_mni, self.output_node, [("out_files", "t1_mni")]),
                 (self.output_node, print_end_message, [("t1_mni", "final_file")]),
             ]
         )
-        # fmt: on
 
         # Find container path from t1w filename
         # =====================================
@@ -220,7 +229,7 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
         # Writing CAPS
         # ============
         write_node = npe.Node(name="WriteCAPS", interface=nio.DataSink())
-        write_node.inputs.base_directory = self.caps_directory
+        write_node.inputs.base_directory = str(self.caps_directory)
         write_node.inputs.parameterization = False
         write_node.inputs.regexp_substitutions = [
             (r"(.*)c1(sub-.*)(\.nii(\.gz)?)$", r"\1\2_segm-graymatter\3"),
@@ -251,28 +260,77 @@ class T1VolumeTissueSegmentation(cpe.Pipeline):
             (r"trait_added", r""),
         ]
 
-        # fmt: off
         self.connect(
             [
                 (self.input_node, container_path, [("t1w", "bids_or_caps_filename")]),
-                (container_path, write_node, [(("container", fix_join, "t1", "spm", "segmentation"), "container")]),
-                (self.output_node, write_node, [(("native_class_images", zip_list_files, True), "native_space"),
-                                                (("dartel_input_images", zip_list_files, True), "dartel_input")]),
-                (self.output_node, write_node, [(("inverse_deformation_field", zip_nii, True), "inverse_deformation_field")]),
-                (self.output_node, write_node, [(("forward_deformation_field", zip_nii, True), "forward_deformation_field")]),
+                (
+                    container_path,
+                    write_node,
+                    [
+                        (
+                            ("container", fix_join, "t1", "spm", "segmentation"),
+                            "container",
+                        )
+                    ],
+                ),
+                (
+                    self.output_node,
+                    write_node,
+                    [
+                        (("native_class_images", zip_list_files, True), "native_space"),
+                        (("dartel_input_images", zip_list_files, True), "dartel_input"),
+                    ],
+                ),
+                (
+                    self.output_node,
+                    write_node,
+                    [
+                        (
+                            ("inverse_deformation_field", zip_nii, True),
+                            "inverse_deformation_field",
+                        )
+                    ],
+                ),
+                (
+                    self.output_node,
+                    write_node,
+                    [
+                        (
+                            ("forward_deformation_field", zip_nii, True),
+                            "forward_deformation_field",
+                        )
+                    ],
+                ),
                 (self.output_node, write_node, [(("t1_mni", zip_nii, True), "t1_mni")]),
             ]
         )
         if self.parameters["save_warped_unmodulated"]:
             self.connect(
                 [
-                    (self.output_node, write_node, [(("normalized_class_images", zip_list_files, True), "normalized")]),
+                    (
+                        self.output_node,
+                        write_node,
+                        [
+                            (
+                                ("normalized_class_images", zip_list_files, True),
+                                "normalized",
+                            )
+                        ],
+                    ),
                 ]
             )
         if self.parameters["save_warped_modulated"]:
             self.connect(
                 [
-                    (self.output_node, write_node, [(("modulated_class_images", zip_list_files, True), "modulated_normalized")]),
+                    (
+                        self.output_node,
+                        write_node,
+                        [
+                            (
+                                ("modulated_class_images", zip_list_files, True),
+                                "modulated_normalized",
+                            )
+                        ],
+                    ),
                 ]
             )
-        # fmt: on

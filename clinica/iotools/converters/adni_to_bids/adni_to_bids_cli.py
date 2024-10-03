@@ -1,10 +1,11 @@
-from typing import List, Optional
+from typing import Iterable, Optional, Union
 
 import click
 
+from clinica import option
 from clinica.iotools.converters import cli_param
 
-ALL_MODALITIES = ("T1", "PET_FDG", "PET_AMYLOID", "PET_TAU", "DWI", "FLAIR", "fMRI")
+from .adni_utils import ADNIModality
 
 
 @click.command(name="adni-to-bids")
@@ -28,13 +29,15 @@ ALL_MODALITIES = ("T1", "PET_FDG", "PET_AMYLOID", "PET_TAU", "DWI", "FLAIR", "fM
     "-m",
     "--modalities",
     multiple=True,
-    type=click.Choice(ALL_MODALITIES),
-    default=ALL_MODALITIES,
+    type=click.Choice(ADNIModality),
+    default=list(ADNIModality),
     help="Convert only the selected modality. By default, all available modalities are converted.",
 )
 @click.option(
     "-xml", "--xml_path", help="Path to the root directory containing the xml metadata."
 )
+@option.global_option_group
+@option.n_procs
 def cli(
     dataset_directory: str,
     clinical_data_directory: str,
@@ -43,40 +46,31 @@ def cli(
     subjects_list: Optional[str] = None,
     clinical_data_only: bool = False,
     force_new_extraction: bool = False,
-    modalities: List[str] = ALL_MODALITIES,
+    modalities: Optional[Iterable[Union[str, ADNIModality]]] = None,
+    n_procs: Optional[int] = None,
 ) -> None:
     """ADNI to BIDS converter.
 
     Convert the imaging and clinical data of ADNI (https://adni.loni.usc.edu/), located in DATASET_DIRECTORY and
     CLINICAL_DATA_DIRECTORY respectively, to a BIDS dataset in the target BIDS_DIRECTORY.
     """
-    from clinica.iotools.converters.adni_to_bids.adni_to_bids import AdniToBids
+    from clinica.iotools.converters.adni_to_bids.adni_to_bids import convert
     from clinica.utils.exceptions import ClinicaParserError
-
-    adni_to_bids = AdniToBids()
-    adni_to_bids.check_adni_dependencies()
 
     if clinical_data_only and force_new_extraction:
         raise ClinicaParserError(
             "Arguments `clinical_data_only` and `force_new_extraction` are mutually exclusive."
         )
-
-    if not clinical_data_only:
-        adni_to_bids.convert_images(
-            dataset_directory,
-            clinical_data_directory,
-            bids_directory,
-            subjects_list,
-            modalities,
-            force_new_extraction,
-        )
-
-    adni_to_bids.convert_clinical_data(
-        clinical_data_dir=clinical_data_directory,
-        out_path=bids_directory,
+    convert(
+        dataset_directory,
+        bids_directory,
+        clinical_data_directory,
         clinical_data_only=clinical_data_only,
-        subjects_list_path=subjects_list,
+        subjects=subjects_list,
+        modalities=modalities or list(ADNIModality),
         xml_path=xml_path,
+        force_new_extraction=force_new_extraction,
+        n_procs=n_procs,
     )
 
 

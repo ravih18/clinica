@@ -3,11 +3,10 @@
 
 ## Introduction
 
-[**BIDS**](http://bids.neuroimaging.io/) (Brain Imaging Data Structure) is the standard adopted for the organisation
- of the datasets used by Clinica pipelines through the command line.
- BIDS provides a unified structure for organising and describing neuroimaging and behavioural data.
- The use of a standard like BIDS makes easier developing and distributing code that uses neuroimaging datasets.
- For this reason, when using Clinica pipelines from the command line, the input format of the dataset is required to be BIDS-compliant.
+[**BIDS**](http://bids.neuroimaging.io/) (Brain Imaging Data Structure) is the standard adopted for the organisation of the datasets used by Clinica pipelines through the command line.
+BIDS provides a unified structure for organising and describing neuroimaging and behavioural data.
+The use of a standard like BIDS makes easier developing and distributing code that uses neuroimaging datasets.
+For this reason, when using Clinica pipelines from the command line, the input format of the dataset is required to be BIDS-compliant.
 
 ## An overview of the BIDS structure
 
@@ -17,32 +16,32 @@ If you need more details, please check the [documentation](https://bids-specific
 ```Text
 BIDS_Dataset/
 ├── sub-CLNC01/
-│   │   ├── ses-M00/
+│   │   ├── ses-M000/
 │   │   │   ├── anat/
-│   │   │   │   ├── sub-CLNC01_ses-M00_T1w.json
-│   │   │   │   └── sub-CLNC01_ses-M00_T1w.nii.gz
+│   │   │   │   ├── sub-CLNC01_ses-M000_T1w.json
+│   │   │   │   └── sub-CLNC01_ses-M000_T1w.nii.gz
 │   │   │   ├── dwi/
-│   │   │   │   ├── sub-CLNC01_ses-M00_dwi.bval
-│   │   │   │   ├── sub-CLNC01_ses-M00_dwi.bvec
-│   │   │   │   ├── sub-CLNC01_ses-M00_dwi.json
-│   │   │   │   ├── sub-CLNC01_ses-M00_dwi.nii.gz
+│   │   │   │   ├── sub-CLNC01_ses-M000_dwi.bval
+│   │   │   │   ├── sub-CLNC01_ses-M000_dwi.bvec
+│   │   │   │   ├── sub-CLNC01_ses-M000_dwi.json
+│   │   │   │   ├── sub-CLNC01_ses-M000_dwi.nii.gz
 │   │   │   │   └── ...
 │   │   │   ├── fmap/
-│   │   │   │   ├── sub-CLNC01_ses-M00_phasediff.json
-│   │   │   │   ├── sub-CLNC01_ses-M00_phasediff.nii.gz
-│   │   │   │   ├── sub-CLNC01_ses-M00_magnitude1.nii.gz
-│   │   │   │   └── sub-CLNC01_ses-M00_magnitude2.nii.gz
+│   │   │   │   ├── sub-CLNC01_ses-M000_phasediff.json
+│   │   │   │   ├── sub-CLNC01_ses-M000_phasediff.nii.gz
+│   │   │   │   ├── sub-CLNC01_ses-M000_magnitude1.nii.gz
+│   │   │   │   └── sub-CLNC01_ses-M000_magnitude2.nii.gz
 │   │   │   ├── func/
-│   │   │   │   ├── sub-CLNC01_ses-M00_task­-rest_bold.json
-│   │   │   │   ├── sub-CLNC01_ses-M00_task­-rest_bold.nii.gz
+│   │   │   │   ├── sub-CLNC01_ses-M000_task­-rest_bold.json
+│   │   │   │   ├── sub-CLNC01_ses-M000_task­-rest_bold.nii.gz
 │   │   │   │   └── ...
 │   │   │   ├── pet/
-│   │   │   │   ├── sub-CLNC01_ses-M00_trc-11CPIB_pet.json
-│   │   │   │   ├── sub-CLNC01_ses-M00_trc-11CPIB_pet.nii.gz
-│   │   │   │   ├── sub-CLNC01_ses-M00_trc-18FFDG_pet.json
-│   │   │   │   ├── sub-CLNC01_ses-M00_trc-18FFDG_pet.nii.gz
-│   │   │   └── sub-CLNC01_ses-M00_scans.tsv
-│   │   ├── ses-M18/
+│   │   │   │   ├── sub-CLNC01_ses-M000_trc-11CPIB_pet.json
+│   │   │   │   ├── sub-CLNC01_ses-M000_trc-11CPIB_pet.nii.gz
+│   │   │   │   ├── sub-CLNC01_ses-M000_trc-18FFDG_pet.json
+│   │   │   │   ├── sub-CLNC01_ses-M000_trc-18FFDG_pet.nii.gz
+│   │   │   └── sub-CLNC01_ses-M000_scans.tsv
+│   │   ├── ses-M018/
 │   │   │   └── ...
 │   │   └── sub-CLNC01_sessions.tsv
 ├── sub-CLNC02/
@@ -66,25 +65,19 @@ BIDS_Dataset/
 
 ## Validation of BIDS datasets
 
-[bids-validator](https://github.com/bids-standard/bids-validator) can be run to ensure that a dataset is BIDS-compliant.
+[bids-validator](https://github.com/bids-standard/bids-validator) can be run to ensure that a dataset is [BIDS](glossary.md#bids)-compliant.
 
-Clinica provides tools to curate several publicly available neuroimaging datasets and convert them to BIDS. Datasets
-currently supported are:
+Clinica provides tools to curate several publicly available neuroimaging datasets and convert them to [BIDS](http://bids.neuroimaging.io/).
 
-- [ADNI](../Converters/ADNI2BIDS/)
-- [AIBL](../Converters/AIBL2BIDS/)
-- [NIFD](../Converters/NIFD2BIDS/)
-- [OASIS](../Converters/OASIS2BIDS/)
-- [OASIS-3](../Converters/OASIS3TOBIDS/)
+Datasets currently supported can be found [here](../#dataset-converters-clinica-convert).
 
 We decided to ignore several warnings and errors detected by the validator.
-These are listed in the `.bids-validator-config.json` and `.bidsignore` files at the root of each BIDS folder.
+These are listed in the `.bids-validator-config.json` and `.bidsignore` files at the root of each [BIDS](http://bids.neuroimaging.io/) folder.
 These files are automatically generated by Clinica converters to ignore the following issues:
 
 - Won't fix errors:
     - All participants do not have the same sessions or modalities (`MISSING_SESSION` / `INCONSISTENT_SUBJECTS`).
-    - JSON files with column description are not generated as TSV files already explicit the purpose of the
-    columns in metadata files (`CUSTOM_COLUMN_WITHOUT_DESCRIPTION`).
+    - [JSON](glossary.md#json) files with column description are not generated as [TSV](glossary.md#tsv) files already explicit the purpose of the columns in metadata files (`CUSTOM_COLUMN_WITHOUT_DESCRIPTION`).
     - The optional field `authors` is not filled in `dataset_description.json` (`NO_AUTHORS`).
     - The folder `conversion_info` is not BIDS-compliant (`conversion_info/` in `.bidsignore`).
 - fMRI-specific: these errors are not fixed as there are no preprocessing pipelines for this modality in Clinica yet

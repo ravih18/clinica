@@ -7,7 +7,6 @@ from sklearn.metrics import (
 
 
 def evaluate_prediction(y, y_hat):
-
     true_positive = 0.0
     true_negative = 0.0
     false_positive = 0.0
@@ -83,7 +82,6 @@ def gram_matrix_linear(data):
 
 
 def evaluate_prediction_multiclass(y, y_hat):
-
     balanced_accuracy = balanced_accuracy_score(y, y_hat)
     accuracy = accuracy_score(y, y_hat)
 
@@ -104,9 +102,9 @@ def metric_distribution(
     """
     # from __future__ import print_function, division
 
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
-    from matplotlib import cm
     from matplotlib.backends.backend_pdf import PdfPages
 
     num_repetitions = metric.shape[0]
@@ -124,7 +122,7 @@ def metric_distribution(
         positions=method_ticks,
     )
 
-    cmap = cm.get_cmap("Paired", num_datasets)
+    cmap = mpl.colormaps["Paired"].resampled(num_datasets)
     for cc, ln in enumerate(line_coll["bodies"]):
         ln.set_facecolor(cmap(cc))
         ln.set_label(labels[cc])

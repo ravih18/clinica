@@ -60,7 +60,7 @@ def rescaleImage(image1, p):
     :param p: vector of minimum and maximum value for the normalization
     how the istogram is normalized:
     between [0 1] if there are no options
-    beween [1 p] if len(p) ==1
+    between [1 p] if len(p) ==1
     between [p[0] p[1]] if len(p) == 2
     :return: image with the histogram normalized
 
@@ -183,7 +183,6 @@ def tensor_determinant(g):
         # if the tensor is 3*3
 
         for i in range(s[0]):
-
             if np.mod(i, 2) == 0:
                 epsilon = 1
             else:
@@ -263,8 +262,8 @@ def roots_poly(C):
             ]
         )
         # two roots
-        rts1 = (-C[1, :] + delta) * (1 / ((2 * C[0, :])))
-        rts2 = (-C[1, :] - delta) * (1 / ((2 * C[0, :])))
+        rts1 = (-C[1, :] + delta) * (1 / (2 * C[0, :]))
+        rts2 = (-C[1, :] - delta) * (1 / (2 * C[0, :]))
         rts = np.array([rts1, rts2])
 
     elif C.shape[0] < 5:
@@ -366,7 +365,7 @@ def tensor_transpose(g):
     """
 
     :param g: tensor
-    :return: tranpose of the tensor
+    :return: transpose of the tensor
     """
     import numpy as np
 
@@ -670,7 +669,7 @@ def operateur(x, ginv, detg):
     if len(x.shape) == 4:
         x = x[0, :, :, :]
     y = np.zeros([x.shape[0] + 2, x.shape[1] + 2, x.shape[2] + 2])
-    y = np.array(y, dtype=np.complex_)
+    y = np.array(y, dtype=np.complex128)
     y[1:-1, 1:-1, 1:-1] = x
     y = utils.tensor_helmholtz(y, ginv, detg, 0)
 
@@ -851,7 +850,7 @@ def heat_solver_tensor_3D_P1_grad_conj(
 ):
     """
     It solves the poisson's equation in 1D on the regular mesh (with mesh of size h)
-    :param f: approximation of a funcion of L^(/Omega)
+    :param f: approximation of a function of L^(/Omega)
     :param g: tensor
     :param t_final:
     :param h:
@@ -893,7 +892,7 @@ def heat_solver_tensor_2D_P1_grad_conj(
 ):
     """
     It solves the poisson's equation in 1D on the regular mesh (with mesh of size h)
-    :param f: approximation of a funcion of L^(/Omega)
+    :param f: approximation of a function of L^(/Omega)
     :param g: tensor
     :param t_final:
     :param h:
@@ -906,7 +905,7 @@ def heat_solver_tensor_2D_P1_grad_conj(
 
     import clinica.pipelines.machine_learning_spatial_svm.spatial_svm_utils as utils
 
-    # intiialisation
+    # initialisation
     h = h or 1
     CL_value = CL_value or np.zeros(f.shape)
 
@@ -962,7 +961,6 @@ def obtain_g_fisher_tensor(dartel_input, FWHM):
     atlas = utils.atlas_decomposition(dartel_input)
 
     for i in atlas:
-
         image = utils.rescaleImage(i, [min_proba, max_proba])
 
         xxx.append(image)

@@ -22,11 +22,9 @@ computing a single multiplicative bias field from the corrected b0 image(s) as i
 
 ## Dependencies
 
-<!--If you installed the docker image of Clinica, nothing is required.-->
+If you only installed the core of Clinica, the `dwi-preprocessing-*` pipeline needs the installation of [ANTs](../Software/Third-party.md#ants), [FSL](../Software/Third-party.md#fsl), and [MRtrix3](../Software/Third-party.md#mrtrix3) on your computer.
 
-If you only installed the core of Clinica, the `dwi-preprocessing-*` pipeline needs the installation of **ANTs**, **FSL**, and **MRtrix3** on your computer.
-Extra installation of **Convert3D** will be needed for the `dwi-preprocessing-using-t1` pipeline.
-You can find how to install these software packages on the [third-party](../../Third-party) page.
+Extra installation of [Convert3D](../Software/Third-party.md#convert3d) will be needed for the `dwi-preprocessing-using-t1` pipeline.
 
 ## Running the pipeline
 
@@ -52,6 +50,9 @@ For the `dwi-preprocessing-using-phasediff-fmap`pipeline, you will also need the
 Without these metadata fields, the pipelines will not run.
 
 If you want to run the pipeline on a subset of your BIDS dataset, you can use the `-tsv` flag to specify in a TSV file the participants belonging to your subset.
+
+It is possible to specify the name of the CAPS dataset that will be created to store the outputs of the pipeline. This works if this CAPS dataset does not exist yet, otherwise the existing name will be kept.
+This can be achieved with the `--caps-name` option. The provided name will appear in the `dataset_description.json` file, at the root of the CAPS folder (see [CAPS Specifications](../CAPS/Specifications.md#the-dataset_descriptionjson-file) for more details).
 
 !!! tip "Decreasing computation time"
     By default, the `eddy` tool of FSL uses OpenMP for parallel computing.

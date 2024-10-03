@@ -23,9 +23,7 @@ The pipeline requires a prior run of the cross-sectional [`t1-freesurfer`](../T1
 
 ## Dependencies
 
-If you only installed the core of Clinica, this pipeline needs the installation of
-**FreeSurfer 6.0** on your computer.
-You can find how to install this software on the [third-party](../../Third-party) page.
+If you only installed the core of Clinica, this pipeline needs the installation of [FreeSurfer 6.0](../Software/Third-party.md#freesurfer) on your computer.
 
 ## Running the pipeline
 
@@ -66,14 +64,14 @@ If you want to run the pipeline on a subset of your dataset, you can use the `-t
     CAPS_DIRECTORY
     └── subjects
      ├── sub-CLNC01
-     │   ├── ses-M00
+     │   ├── ses-M000
      │   │   └── t1
      │   │       └── freesurfer_cross_sectional
-     │   └── ses-M18
+     │   └── ses-M018
      │       └── t1
      │           └── freesurfer_cross_sectional
      └── sub-CLNC02
-         └── ses-M00
+         └── ses-M000
              └── t1
                  └── freesurfer_cross_sectional
     ```
@@ -83,16 +81,16 @@ If you want to run the pipeline on a subset of your dataset, you can use the `-t
     ```console
     $ clinica run t1-freesurfer-template CAPS -np 2 -wd <path_to_wd>
     The pipeline will be run on the following 2 participant(s):
-        sub-CLNC01 | ses-M18, ses-M00 | long-M00M18
-        sub-CLNC02 | ses-M00 | long-M00
+        sub-CLNC01 | ses-M018, ses-M000 | long-M000M018
+        sub-CLNC02 | ses-M000 | long-M000
     List available in <path_to_wd>/t1-freesurfer-template/participants.tsv
     The pipeline will last approximately 10 hours per participant.
-    [13:33:43] sub-CLNC02 | long-M00 has only one time point. Needs to create a $SUBJECTS_DIR folder in /tmp/tmpe7ztq9hq
-    [13:33:43] Running pipeline for sub-CLNC01 | long-M00M18
-    [13:33:43] Running pipeline for sub-CLNC02 | long-M00
-    [19:51:18] sub-CLNC01 | long-M00M18 has completed
-    [20:15:04] Segmentation of sub-CLNC02 | long-M00 has moved to working directory and $SUBJECTS_DIR folder (/tmp/tmpe7ztq9hq) was deleted
-    [20:15:05] sub-CLNC02 | long-M00 has completed
+    [13:33:43] sub-CLNC02 | long-M000 has only one time point. Needs to create a $SUBJECTS_DIR folder in /tmp/tmpe7ztq9hq
+    [13:33:43] Running pipeline for sub-CLNC01 | long-M000M018
+    [13:33:43] Running pipeline for sub-CLNC02 | long-M000
+    [19:51:18] sub-CLNC01 | long-M000M018 has completed
+    [20:15:04] Segmentation of sub-CLNC02 | long-M000 has moved to working directory and $SUBJECTS_DIR folder (/tmp/tmpe7ztq9hq) was deleted
+    [20:15:05] sub-CLNC02 | long-M000 has completed
     [20:15:09] The t1-freesurfer-template pipeline has completed. You can now delete the working directory (<path_to_wd>/t1-freesurfer-template).
     ```
 
@@ -156,7 +154,7 @@ More details regarding the `recon-all` output files can be found on the [FreeSur
 
 ??? cite "Example of paragraph (long version):"
     These results have been obtained using the `t1-freesurfer-longitudinal` pipeline of Clinica
-    [[Routier et al., 2021](https://doi.org/10.3389/fninf.2021.689675).
+    [Routier et al., 2021](https://doi.org/10.3389/fninf.2021.689675).
     This pipeline is a wrapper of different tools of the FreeSurfer software
     [[Fischl et al., 2012](http://dx.doi.org/10.1016/j.neuroimage.2012.01.021)],
     which is documented and freely available for download online (<http://surfer.nmr.mgh.harvard.edu/>).

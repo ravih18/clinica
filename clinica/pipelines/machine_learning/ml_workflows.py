@@ -1,6 +1,9 @@
+from typing import Optional, Union
+
 import numpy as np
 
 from clinica.pipelines.machine_learning import algorithm, base, input, validation
+from clinica.utils.pet import SUVRReferenceRegion, Tracer
 
 
 class VoxelBasedKFoldDualSVM(base.MLWorkflow):
@@ -14,11 +17,11 @@ class VoxelBasedKFoldDualSVM(base.MLWorkflow):
         output_dir,
         fwhm=0,
         modulated="on",
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         precomputed_kernel=None,
-        mask_zeros=True,
+        mask_zeros: bool = True,
         n_threads=15,
         n_folds=10,
         grid_search_folds=10,
@@ -26,7 +29,6 @@ class VoxelBasedKFoldDualSVM(base.MLWorkflow):
         c_range=np.logspace(-6, 2, 17),
         splits_indices=None,
     ):
-
         super(VoxelBasedKFoldDualSVM, self).__init__(
             input.CAPSVoxelBasedInput,
             validation.KFoldCV,
@@ -47,8 +49,8 @@ class VoxelBasedRepKFoldDualSVM(base.MLWorkflow):
         output_dir,
         fwhm=0,
         modulated="on",
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         precomputed_kernel=None,
         mask_zeros=True,
@@ -60,7 +62,6 @@ class VoxelBasedRepKFoldDualSVM(base.MLWorkflow):
         c_range=np.logspace(-6, 2, 17),
         splits_indices=None,
     ):
-
         super(VoxelBasedRepKFoldDualSVM, self).__init__(
             input.CAPSVoxelBasedInput,
             validation.RepeatedKFoldCV,
@@ -81,8 +82,8 @@ class VoxelBasedRepHoldOutDualSVM(base.MLWorkflow):
         output_dir,
         fwhm=0,
         modulated="on",
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         precomputed_kernel=None,
         mask_zeros=True,
@@ -94,7 +95,6 @@ class VoxelBasedRepHoldOutDualSVM(base.MLWorkflow):
         c_range=np.logspace(-6, 2, 17),
         splits_indices=None,
     ):
-
         super().__init__(
             input.CAPSVoxelBasedInput,
             validation.RepeatedHoldOut,
@@ -113,8 +113,8 @@ class VertexBasedRepHoldOutDualSVM(base.MLWorkflow):
         group_label,
         output_dir,
         image_type="PET",
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         fwhm=20,
         precomputed_kernel=None,
         n_threads=15,
@@ -125,7 +125,6 @@ class VertexBasedRepHoldOutDualSVM(base.MLWorkflow):
         c_range=np.logspace(-10, 2, 1000),
         splits_indices=None,
     ):
-
         super(VertexBasedRepHoldOutDualSVM, self).__init__(
             input.CAPSVertexBasedInput,
             validation.RepeatedHoldOut,
@@ -145,8 +144,8 @@ class RegionBasedRepHoldOutDualSVM(base.MLWorkflow):
         image_type,
         atlas,
         output_dir,
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         n_threads=15,
         n_iterations=100,
@@ -156,7 +155,6 @@ class RegionBasedRepHoldOutDualSVM(base.MLWorkflow):
         c_range=np.logspace(-6, 2, 17),
         splits_indices=None,
     ):
-
         super(RegionBasedRepHoldOutDualSVM, self).__init__(
             input.CAPSRegionBasedInput,
             validation.RepeatedHoldOut,
@@ -176,8 +174,8 @@ class RegionBasedRepHoldOutLogisticRegression(base.MLWorkflow):
         image_type,
         atlas,
         output_dir,
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         n_threads=15,
         n_iterations=100,
@@ -187,7 +185,6 @@ class RegionBasedRepHoldOutLogisticRegression(base.MLWorkflow):
         c_range=np.logspace(-6, 2, 17),
         splits_indices=None,
     ):
-
         super(RegionBasedRepHoldOutLogisticRegression, self).__init__(
             input.CAPSRegionBasedInput,
             validation.RepeatedHoldOut,
@@ -207,8 +204,8 @@ class RegionBasedRepHoldOutRandomForest(base.MLWorkflow):
         image_type,
         atlas,
         output_dir,
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         n_threads=15,
         n_iterations=100,
@@ -221,7 +218,6 @@ class RegionBasedRepHoldOutRandomForest(base.MLWorkflow):
         max_features_range=("auto", 0.25, 0.5),
         splits_indices=None,
     ):
-
         super(RegionBasedRepHoldOutRandomForest, self).__init__(
             input.CAPSRegionBasedInput,
             validation.RepeatedHoldOut,
@@ -241,8 +237,8 @@ class RegionBasedLearningCurveRepHoldOutDualSVM(base.MLWorkflow):
         image_type,
         atlas,
         output_dir,
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         precomputed_kernel=None,
         n_threads=15,
@@ -253,7 +249,6 @@ class RegionBasedLearningCurveRepHoldOutDualSVM(base.MLWorkflow):
         balanced=True,
         c_range=np.logspace(-6, 2, 17),
     ):
-
         super(RegionBasedLearningCurveRepHoldOutDualSVM, self).__init__(
             input.CAPSRegionBasedInput,
             validation.LearningCurveRepeatedHoldOut,
@@ -274,8 +269,8 @@ class VoxelBasedLearningCurveRepHoldOutDualSVM(base.MLWorkflow):
         output_dir,
         fwhm=0,
         modulated="on",
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         precomputed_kernel=None,
         mask_zeros=True,
@@ -287,7 +282,6 @@ class VoxelBasedLearningCurveRepHoldOutDualSVM(base.MLWorkflow):
         balanced=True,
         c_range=np.logspace(-6, 2, 17),
     ):
-
         super(VoxelBasedLearningCurveRepHoldOutDualSVM, self).__init__(
             input.CAPSVoxelBasedInput,
             validation.LearningCurveRepeatedHoldOut,
@@ -307,8 +301,8 @@ class RegionBasedRepKFoldDualSVM(base.MLWorkflow):
         image_type,
         atlas,
         output_dir,
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         n_threads=15,
         n_iterations=100,
@@ -319,7 +313,6 @@ class RegionBasedRepKFoldDualSVM(base.MLWorkflow):
         c_range=np.logspace(-6, 2, 17),
         splits_indices=None,
     ):
-
         super(RegionBasedRepKFoldDualSVM, self).__init__(
             input.CAPSRegionBasedInput,
             validation.RepeatedKFoldCV,
@@ -340,8 +333,8 @@ class CAPSTsvRepHoldOutDualSVM(base.MLWorkflow):
         atlas,
         dataset,
         output_dir,
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         n_threads=15,
         n_iterations=100,
@@ -351,7 +344,6 @@ class CAPSTsvRepHoldOutDualSVM(base.MLWorkflow):
         c_range=np.logspace(-6, 2, 17),
         splits_indices=None,
     ):
-
         super(CAPSTsvRepHoldOutDualSVM, self).__init__(
             input.CAPSTSVBasedInput,
             validation.RepeatedHoldOut,
@@ -372,8 +364,8 @@ class CAPSTsvRepHoldOutRandomForest(base.MLWorkflow):
         atlas,
         dataset,
         output_dir,
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         n_threads=15,
         n_iterations=100,
@@ -386,7 +378,6 @@ class CAPSTsvRepHoldOutRandomForest(base.MLWorkflow):
         max_features_range=("auto", 0.25, 0.5),
         splits_indices=None,
     ):
-
         super(CAPSTsvRepHoldOutRandomForest, self).__init__(
             input.CAPSTSVBasedInput,
             validation.RepeatedHoldOut,
@@ -410,8 +401,8 @@ class VoxelBasedREGRepKFoldDualSVM(base.MLWorkflow):
         output_dir,
         fwhm=0,
         modulated="on",
-        acq_label=None,
-        suvr_reference_region=None,
+        acq_label: Optional[Union[str, Tracer]] = None,
+        suvr_reference_region: Optional[Union[str, SUVRReferenceRegion]] = None,
         use_pvc_data=False,
         precomputed_kernel=None,
         mask_zeros=True,
@@ -424,7 +415,6 @@ class VoxelBasedREGRepKFoldDualSVM(base.MLWorkflow):
         c_range=np.logspace(-6, 2, 17),
         splits_indices=None,
     ):
-
         super(VoxelBasedREGRepKFoldDualSVM, self).__init__(
             input.CAPSTSVBasedInput,
             validation.RepeatedKFoldCV,
@@ -455,7 +445,6 @@ class TsvRepHoldOutRandomForest(base.MLWorkflow):
         splits_indices=None,
         inner_cv=False,
     ):
-
         super(TsvRepHoldOutRandomForest, self).__init__(
             input.TsvInput,
             validation.RepeatedHoldOut,

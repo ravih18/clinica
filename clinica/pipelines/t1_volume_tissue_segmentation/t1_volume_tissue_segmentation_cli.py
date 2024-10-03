@@ -2,25 +2,30 @@ from typing import List, Optional
 
 import click
 
+from clinica import option
 from clinica.pipelines import cli_param
+from clinica.pipelines.engine import clinica_pipeline
 
 pipeline_name = "t1-volume-tissue-segmentation"
 
 
+@clinica_pipeline
 @click.command(name=pipeline_name)
 @cli_param.argument.bids_directory
 @cli_param.argument.caps_directory
 @cli_param.option_group.common_pipelines_options
 @cli_param.option.subjects_sessions_tsv
 @cli_param.option.working_directory
-@cli_param.option.n_procs
 @cli_param.option.yes
+@option.global_option_group
+@option.n_procs
 @cli_param.option_group.advanced_pipeline_options
 @cli_param.option.tissue_classes
 @cli_param.option.dartel_tissues
 @cli_param.option.tissue_probability_maps
 @cli_param.option.dont_save_warped_unmodulated
 @cli_param.option.save_warped_modulated
+@cli_param.option.caps_name
 def cli(
     bids_directory: str,
     caps_directory: str,
@@ -33,6 +38,7 @@ def cli(
     working_directory: Optional[str] = None,
     n_procs: Optional[int] = None,
     yes: bool = False,
+    caps_name: Optional[str] = None,
 ) -> None:
     """Tissue segmentation, bias correction and spatial normalization to MNI space of T1w images with SPM.
 
@@ -60,6 +66,7 @@ def cli(
         base_dir=working_directory,
         parameters=parameters,
         name=pipeline_name,
+        caps_name=caps_name,
     )
 
     exec_pipeline = (

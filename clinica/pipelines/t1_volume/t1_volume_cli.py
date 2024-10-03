@@ -2,11 +2,14 @@ from typing import List, Optional, Tuple
 
 import click
 
+from clinica import option
 from clinica.pipelines import cli_param
+from clinica.pipelines.engine import clinica_pipeline
 
 pipeline_name = "t1-volume"
 
 
+@clinica_pipeline
 @click.command(name=pipeline_name)
 @cli_param.argument.bids_directory
 @cli_param.argument.caps_directory
@@ -16,7 +19,6 @@ pipeline_name = "t1-volume"
 @cli_param.option_group.common_pipelines_options
 @cli_param.option.subjects_sessions_tsv
 @cli_param.option.working_directory
-@cli_param.option.n_procs
 @cli_param.option.yes
 @cli_param.option_group.advanced_pipeline_options
 @cli_param.option.tissue_classes
@@ -27,7 +29,10 @@ pipeline_name = "t1-volume"
 @cli_param.option.tissues
 @cli_param.option.modulate
 @cli_param.option.voxel_size
+@option.global_option_group
+@option.n_procs
 @click.pass_context
+@cli_param.option.caps_name
 def cli(
     ctx: click.Context,
     bids_directory: str,
@@ -46,6 +51,7 @@ def cli(
     working_directory: Optional[str] = None,
     n_procs: Optional[int] = None,
     yes: bool = False,
+    caps_name: Optional[str] = None,
 ) -> None:
     """Volume-based processing of T1-weighted MR images.
 
@@ -78,9 +84,7 @@ def cli(
     )
 
     if not subjects_sessions_tsv:
-        session_ids, participant_ids = get_subject_session_list(
-            bids_directory, None, True, False
-        )
+        participant_ids, session_ids = get_subject_session_list(bids_directory)
         now = datetime.datetime.now().strftime("%H%M%S")
         subjects_sessions_tsv = now + "_participants.tsv"
         save_participants_sessions(
@@ -101,6 +105,7 @@ def cli(
         working_directory=working_directory,
         n_procs=n_procs,
         yes=yes,
+        caps_name=caps_name,
     )
 
     cprint("Part 2/4: Running t1-volume-create-dartel pipeline.")
@@ -113,6 +118,7 @@ def cli(
         subjects_sessions_tsv=subjects_sessions_tsv,
         working_directory=working_directory,
         n_procs=n_procs,
+        caps_name=caps_name,
     )
 
     cprint("Part 3/4: Running t1-volume-dartel2mni pipeline.")
@@ -128,6 +134,7 @@ def cli(
         subjects_sessions_tsv=subjects_sessions_tsv,
         working_directory=working_directory,
         n_procs=n_procs,
+        caps_name=caps_name,
     )
 
     cprint("Part 4/4: Running t1-volume-parcellation pipeline.")
@@ -138,6 +145,7 @@ def cli(
         subjects_sessions_tsv=subjects_sessions_tsv,
         working_directory=working_directory,
         n_procs=n_procs,
+        caps_name=caps_name,
     )
 
 

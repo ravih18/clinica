@@ -2,20 +2,25 @@ from typing import Optional
 
 import click
 
+from clinica import option
 from clinica.pipelines import cli_param
+from clinica.pipelines.engine import clinica_pipeline
 
 pipeline_name = "t1-volume-parcellation"
 
 
+@clinica_pipeline
 @click.command(name=pipeline_name)
 @cli_param.argument.caps_directory
 @cli_param.argument.group_label
 @cli_param.option_group.common_pipelines_options
 @cli_param.option.subjects_sessions_tsv
 @cli_param.option.working_directory
-@cli_param.option.n_procs
+@option.global_option_group
+@option.n_procs
 @cli_param.option_group.advanced_pipeline_options
 @cli_param.option.modulate
+@cli_param.option.caps_name
 def cli(
     caps_directory: str,
     group_label: str,
@@ -23,6 +28,7 @@ def cli(
     working_directory: Optional[str] = None,
     n_procs: Optional[int] = None,
     modulate: bool = True,
+    caps_name: Optional[str] = None,
 ) -> None:
     """Computation of mean GM concentration for a set of regions.
 
@@ -36,7 +42,10 @@ def cli(
 
     from .t1_volume_parcellation_pipeline import T1VolumeParcellation
 
-    parameters = {"group_label": group_label, "modulate": modulate}
+    parameters = {
+        "group_label": group_label,
+        "modulate": modulate,
+    }
 
     pipeline = T1VolumeParcellation(
         caps_directory=caps_directory,
@@ -44,6 +53,7 @@ def cli(
         base_dir=working_directory,
         parameters=parameters,
         name=pipeline_name,
+        caps_name=caps_name,
     )
 
     exec_pipeline = (
