@@ -22,10 +22,10 @@ class PETPipeline(Pipeline):
         else:
             self.parameters["reconstruction_method"] = None
 
-    def _get_pet_scans_query(self) -> dict:
+    def _get_pet_scans_query(self, reconstruction_method) -> dict:
         """Return the query to retrieve PET scans."""
         from clinica.utils.input_files import bids_pet_nii
 
         return bids_pet_nii(
-            self.parameters["acq_label"], self.parameters["reconstruction_method"]
+            self.parameters["acq_label"], reconstruction_method
         )

@@ -378,7 +378,8 @@ class Pipeline(Workflow):
 
     def __init__(
         self,
-        bids_directory: Optional[str] = None,
+        bids_directory_reference: Optional[str] = None,
+        bids_directory_target: Optional[str] = None,
         caps_directory: Optional[str] = None,
         tsv_file: Optional[str] = None,
         overwrite_caps: Optional[bool] = False,
@@ -392,8 +393,11 @@ class Pipeline(Workflow):
 
         Parameters
         ----------
-        bids_directory : str, optional
-            Path to a BIDS directory. Defaults to None.
+        bids_directory_reference : str, optional
+            Path to a BIDS directory used to compute the transformation PET to T1. Defaults to None.
+
+        bids_directory_target : str, optional
+            Path to a BIDS directory of images that will be transformed. Defaults to None.
 
         caps_directory : str, optional
             Path to a CAPS directory. Defaults to None.
@@ -435,8 +439,11 @@ class Pipeline(Workflow):
 
         self._is_built: bool = False
         self._overwrite_caps: bool = overwrite_caps
-        self._bids_directory: Optional[Path] = (
-            Path(bids_directory).absolute() if bids_directory else None
+        self._bids_directory_reference: Optional[Path] = (
+            Path(bids_directory_reference).absolute() if bids_directory_reference else None
+        )
+        self._bids_directory_target: Optional[Path] = (
+            Path(bids_directory_target).absolute() if bids_directory_target else None
         )
         self._caps_directory: Optional[Path] = (
             Path(caps_directory).absolute() if caps_directory else None
@@ -469,7 +476,7 @@ class Pipeline(Workflow):
             ]
         self.caps_name = caps_name
 
-        if not self._bids_directory:
+        if not self._bids_directory_reference or not self._bids_directory_target:
             if not self._caps_directory:
                 raise RuntimeError(
                     f"The {self._name} pipeline does not contain "
@@ -491,7 +498,8 @@ class Pipeline(Workflow):
                 )
             self.is_bids_dir = False
         else:
-            check_bids_folder(self._bids_directory)
+            check_bids_folder(self._bids_directory_reference)
+            check_bids_folder(self._bids_directory_target)
             self.is_bids_dir = True
             if self._caps_directory is not None:
                 if (
@@ -529,7 +537,7 @@ class Pipeline(Workflow):
     @property
     def input_dir(self) -> Path:
         if self.is_bids_dir:
-            return self._bids_directory
+            return self._bids_directory_target
         return self._caps_directory
 
     @property
@@ -568,8 +576,12 @@ class Pipeline(Workflow):
         return self._output_node
 
     @property
-    def bids_directory(self) -> Optional[Path]:
-        return self._bids_directory
+    def bids_directory_reference(self) -> Optional[Path]:
+        return self._bids_directory_reference
+    
+    @property
+    def bids_directory_target(self) -> Optional[Path]:
+        return self._bids_directory_target
 
     @property
     def caps_directory(self) -> Optional[Path]:

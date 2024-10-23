@@ -38,7 +38,7 @@ class PETLinear(PETPipeline):
         list of str :
             A list of (string) input fields name.
         """
-        return ["pet", "t1w", "t1w_to_mni", "t1w_linear"]
+        return ["pet_reference", "pet_target", "t1w", "t1w_to_mni", "t1w_linear"]
 
     def get_output_fields(self) -> List[str]:
         """Specify the list of possible outputs of this pipeline.
@@ -83,26 +83,38 @@ class PETLinear(PETPipeline):
         self.ref_mask = get_suvr_mask(self.parameters["suvr_reference_region"])
 
         # Inputs from BIDS directory
-        pet_files, pet_errors = clinica_file_reader(
+        pet_files_reference, pet_errors_reference = clinica_file_reader(
             self.subjects,
             self.sessions,
-            self.bids_directory,
-            self._get_pet_scans_query(),
+            self.bids_directory_reference,
+            self._get_pet_scans_query("coregavg"),
         )
-        if pet_errors:
+        if pet_errors_reference:
             raise ClinicaBIDSError(
                 format_clinica_file_reader_errors(
-                    pet_errors, self._get_pet_scans_query()
+                    pet_errors_reference, self._get_pet_scans_query("coregavg")
+                )
+            )
+        pet_files_target, pet_errors_target = clinica_file_reader(
+            self.subjects,
+            self.sessions,
+            self.bids_directory_target,
+            self._get_pet_scans_query("coregiso"),
+        )
+        if pet_errors_target:
+            raise ClinicaBIDSError(
+                format_clinica_file_reader_errors(
+                    pet_errors_reference, self._get_pet_scans_query("coregiso")
                 )
             )
 
         # T1w file:
-        t1w_files, t1w_errors = clinica_file_reader(
-            self.subjects, self.sessions, self.bids_directory, T1W_NII
+        t1w_files_reference, t1w_errors_reference = clinica_file_reader(
+            self.subjects, self.sessions, self.bids_directory_reference, T1W_NII
         )
-        if t1w_errors:
+        if t1w_errors_reference:
             raise ClinicaBIDSError(
-                format_clinica_file_reader_errors(t1w_errors, T1W_NII)
+                format_clinica_file_reader_errors(t1w_errors_reference, T1W_NII)
             )
 
         # Inputs from t1-linear pipeline
@@ -139,8 +151,9 @@ class PETLinear(PETPipeline):
         read_input_node = npe.Node(
             name="LoadingCLIArguments",
             iterables=[
-                ("t1w", t1w_files),
-                ("pet", pet_files),
+                ("t1w", t1w_files_reference),
+                ("pet_reference", pet_files_reference),
+                ("pet_target", pet_files_target),
                 ("t1w_to_mni", t1w_to_mni_transformation_files),
                 ("t1w_linear", t1w_linear_files),
             ],
@@ -150,7 +163,8 @@ class PETLinear(PETPipeline):
         self.connect(
             [
                 (read_input_node, self.input_node, [("t1w", "t1w")]),
-                (read_input_node, self.input_node, [("pet", "pet")]),
+                (read_input_node, self.input_node, [("pet_reference", "pet_reference")]),
+                (read_input_node, self.input_node, [("pet_target", "pet_target")]),
                 (read_input_node, self.input_node, [("t1w_to_mni", "t1w_to_mni")]),
                 (read_input_node, self.input_node, [("t1w_linear", "t1w_linear")]),
             ]
@@ -207,13 +221,13 @@ class PETLinear(PETPipeline):
         )
         self.connect(
             [
-                (self.input_node, container_path, [("pet", "bids_or_caps_filename")]),
+                (self.input_node, container_path, [("pet_target", "bids_or_caps_filename")]),
                 (
                     container_path,
                     write_node,
                     [(("container", fix_join, "pet_linear"), "container")],
                 ),
-                (self.input_node, rename_files, [("pet", "pet_bids_image_filename")]),
+                (self.input_node, rename_files, [("pet_target", "pet_bids_image_filename")]),
                 (
                     self.output_node,
                     rename_files,
@@ -276,8 +290,8 @@ class PETLinear(PETPipeline):
 
         init_node = npe.Node(
             interface=nutil.Function(
-                input_names=["pet"],
-                output_names=["pet"],
+                input_names=["pet_reference"],
+                output_names=["pet_reference"],
                 function=init_input_node,
             ),
             name="initPipeline",
@@ -377,7 +391,7 @@ class PETLinear(PETPipeline):
         # 6. Print end message
         print_end_message = npe.Node(
             interface=nutil.Function(
-                input_names=["pet", "final_file"], function=print_end_pipeline
+                input_names=["pet_target", "final_file"], function=print_end_pipeline
             ),
             name="WriteEndMessage",
         )
@@ -390,9 +404,12 @@ class PETLinear(PETPipeline):
 
         self.connect(
             [
-                (self.input_node, init_node, [("pet", "pet")]),
-                # STEP 1:
-                (init_node, clipping_node, [("pet", "input_pet")]),
+                (self.input_node, init_node, [("pet_reference", "pet_reference")]),
+                # STEP 1
+                (init_node, clipping_node, [("pet_reference", "input_pet")]),
+
+                (self.input_node, ants_registration_node, [("t1w", "fixed_image")]),
+                (init_node, ants_registration_node, [("pet_reference", "moving_image")]),
                 # STEP 2
                 (
                     clipping_node,
@@ -433,7 +450,7 @@ class PETLinear(PETPipeline):
                     [("forward_transforms", "transforms")],
                 ),
                 (
-                    ants_applytransform_node,
+                    ants_applytransform_node,               ## PROBLEME ICI
                     ants_applytransform_nonlinear_node,
                     [("output_image", "input_image")],
                 ),
@@ -458,7 +475,7 @@ class PETLinear(PETPipeline):
                     self.output_node,
                     [("output_image", "suvr_pet")],
                 ),
-                (self.input_node, print_end_message, [("pet", "pet")]),
+                (self.input_node, print_end_message, [("pet_target", "pet_target")]),
             ]
         )
         # STEP 5

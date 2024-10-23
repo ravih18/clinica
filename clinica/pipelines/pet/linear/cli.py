@@ -11,7 +11,14 @@ pipeline_name = "pet-linear"
 
 @clinica_pipeline
 @click.command(name=pipeline_name)
-@cli_param.argument.bids_directory
+@click.argument(
+    "bids_directory_reference",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+)
+@click.argument(
+    "bids_directory_target",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+)
 @cli_param.argument.caps_directory
 @cli_param.argument.acq_label
 @cli_param.argument.suvr_reference_region
@@ -35,7 +42,8 @@ pipeline_name = "pet-linear"
 @option.global_option_group
 @option.n_procs
 def cli(
-    bids_directory: str,
+    bids_directory_reference: str,
+    bids_directory_target: str,
     caps_directory: str,
     acq_label: str,
     suvr_reference_region: str,
@@ -75,7 +83,8 @@ def cli(
     }
 
     pipeline = PETLinear(
-        bids_directory=bids_directory,
+        bids_directory_reference=bids_directory_reference,
+        bids_directory_target=bids_directory_target,
         caps_directory=caps_directory,
         tsv_file=subjects_sessions_tsv,
         base_dir=working_directory,
