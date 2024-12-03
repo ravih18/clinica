@@ -440,7 +440,9 @@ class Pipeline(Workflow):
         self._is_built: bool = False
         self._overwrite_caps: bool = overwrite_caps
         self._bids_directory_reference: Optional[Path] = (
-            Path(bids_directory_reference).absolute() if bids_directory_reference else None
+            Path(bids_directory_reference).absolute()
+            if bids_directory_reference
+            else None
         )
         self._bids_directory_target: Optional[Path] = (
             Path(bids_directory_target).absolute() if bids_directory_target else None
@@ -578,7 +580,7 @@ class Pipeline(Workflow):
     @property
     def bids_directory_reference(self) -> Optional[Path]:
         return self._bids_directory_reference
-    
+
     @property
     def bids_directory_target(self) -> Optional[Path]:
         return self._bids_directory_target
@@ -927,18 +929,19 @@ class Pipeline(Workflow):
 
         If it is cross-sectional, propose to convert it to a longitudinal layout.
         """
-        if self.bids_directory is None:
+        if self.bids_directory_reference is None:
             return
         subjects = [
             f.name
-            for f in self.bids_directory.iterdir()
-            if (self.bids_directory / f).is_dir() and f.name.startswith("sub-")
+            for f in self.bids_directory_reference.iterdir()
+            if (self.bids_directory_reference / f).is_dir()
+            and f.name.startswith("sub-")
         ]
         (
             cross_sectional_subjects,
             longitudinal_subjects,
         ) = _detect_cross_sectional_and_longitudinal_subjects(
-            subjects, self.bids_directory
+            subjects, self.bids_directory_reference
         )
         if cross_sectional_subjects:
             self._convert_to_longitudinal_if_user_agrees(
@@ -956,14 +959,15 @@ class Pipeline(Workflow):
 
         log_and_warn(
             (
-                f"The following subjects of the input dataset {self.bids_directory} seem to "
+                f"The following subjects of the input dataset {self.bids_directory_reference} seem to "
                 "have a cross-sectional layout which is not supported by Clinica:\n"
                 + "\n- ".join(cross_sectional_subjects)
             ),
             UserWarning,
         )
         proposed_bids = (
-            self.bids_directory.parent / f"{self.bids_directory.name}_clinica_compliant"
+            self.bids_directory_reference.parent
+            / f"{self.bids_directory_reference.name}_clinica_compliant"
         )
         if not click.confirm(
             "Do you want to proceed with the conversion in another folder? "
@@ -978,7 +982,7 @@ class Pipeline(Workflow):
             sys.exit()
         cprint("Converting cross-sectional dataset into longitudinal...")
         _convert_cross_sectional(
-            self.bids_directory,
+            self.bids_directory_reference,
             proposed_bids,
             cross_sectional_subjects,
             longitudinal_subjects,
@@ -987,7 +991,7 @@ class Pipeline(Workflow):
             f"Conversion succeeded. Your clinica-compliant dataset is located here: {proposed_bids}. "
             "The pipeline will run using this new dataset as input."
         )
-        self._bids_directory = proposed_bids
+        self._bids_directory_reference = proposed_bids
         self._compute_subjects_and_sessions()
 
     @abc.abstractmethod

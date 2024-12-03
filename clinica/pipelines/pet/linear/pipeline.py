@@ -87,12 +87,12 @@ class PETLinear(PETPipeline):
             self.subjects,
             self.sessions,
             self.bids_directory_reference,
-            self._get_pet_scans_query("coregavg"),
+            self._get_pet_scans_query(None),
         )
         if pet_errors_reference:
             raise ClinicaBIDSError(
                 format_clinica_file_reader_errors(
-                    pet_errors_reference, self._get_pet_scans_query("coregavg")
+                    pet_errors_reference, self._get_pet_scans_query(None)
                 )
             )
         pet_files_target, pet_errors_target = clinica_file_reader(
@@ -163,7 +163,11 @@ class PETLinear(PETPipeline):
         self.connect(
             [
                 (read_input_node, self.input_node, [("t1w", "t1w")]),
-                (read_input_node, self.input_node, [("pet_reference", "pet_reference")]),
+                (
+                    read_input_node,
+                    self.input_node,
+                    [("pet_reference", "pet_reference")],
+                ),
                 (read_input_node, self.input_node, [("pet_target", "pet_target")]),
                 (read_input_node, self.input_node, [("t1w_to_mni", "t1w_to_mni")]),
                 (read_input_node, self.input_node, [("t1w_linear", "t1w_linear")]),
@@ -221,13 +225,21 @@ class PETLinear(PETPipeline):
         )
         self.connect(
             [
-                (self.input_node, container_path, [("pet_target", "bids_or_caps_filename")]),
+                (
+                    self.input_node,
+                    container_path,
+                    [("pet_target", "bids_or_caps_filename")],
+                ),
                 (
                     container_path,
                     write_node,
                     [(("container", fix_join, "pet_linear"), "container")],
                 ),
-                (self.input_node, rename_files, [("pet_target", "pet_bids_image_filename")]),
+                (
+                    self.input_node,
+                    rename_files,
+                    [("pet_target", "pet_bids_image_filename")],
+                ),
                 (
                     self.output_node,
                     rename_files,
@@ -308,8 +320,16 @@ class PETLinear(PETPipeline):
         # The core (processing) nodes
 
         # 1. Clipping node
-        clipping_node = npe.Node(
-            name="clipping",
+        clipping_ref_node = npe.Node(
+            name="clipping_ref",
+            interface=nutil.Function(
+                function=clip_task,
+                input_names=["input_pet"],
+                output_names=["output_image"],
+            ),
+        )
+        clipping_target_node = npe.Node(
+            name="clipping_target",
             interface=nutil.Function(
                 function=clip_task,
                 input_names=["input_pet"],
@@ -405,14 +425,15 @@ class PETLinear(PETPipeline):
         self.connect(
             [
                 (self.input_node, init_node, [("pet_reference", "pet_reference")]),
-                # STEP 1
-                (init_node, clipping_node, [("pet_reference", "input_pet")]),
-
-                (self.input_node, ants_registration_node, [("t1w", "fixed_image")]),
-                (init_node, ants_registration_node, [("pet_reference", "moving_image")]),
+                # STEP 0
+                (init_node, clipping_ref_node, [("pet_reference", "input_pet")]),
+                (self.input_node, clipping_target_node, [("pet_target", "input_pet")]),
+                # STEP 1 duplicate
+                # (self.input_node, ants_registration_node, [("t1w", "fixed_image")]),
+                # (init_node, ants_registration_node, [("pet_reference", "moving_image")]),
                 # STEP 2
                 (
-                    clipping_node,
+                    clipping_ref_node,
                     ants_registration_node,
                     [("output_image", "moving_image")],
                 ),
@@ -429,7 +450,7 @@ class PETLinear(PETPipeline):
                     [("t1w_to_mni", "t1w_to_mni_transform")],
                 ),
                 (
-                    clipping_node,
+                    clipping_target_node,
                     ants_applytransform_node,
                     [("output_image", "input_image")],
                 ),
@@ -450,7 +471,7 @@ class PETLinear(PETPipeline):
                     [("forward_transforms", "transforms")],
                 ),
                 (
-                    ants_applytransform_node,               ## PROBLEME ICI
+                    ants_applytransform_node,
                     ants_applytransform_nonlinear_node,
                     [("output_image", "input_image")],
                 ),
@@ -514,7 +535,7 @@ class PETLinear(PETPipeline):
             self.connect(
                 [
                     (
-                        clipping_node,
+                        clipping_target_node,
                         ants_applytransform_optional_node,
                         [("output_image", "input_image"), ("t1w", "reference_image")],
                     ),

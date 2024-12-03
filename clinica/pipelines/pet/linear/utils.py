@@ -12,14 +12,14 @@ _all__ = [
 ]
 
 
-def init_input_node(pet: str) -> str:
+def init_input_node(pet_reference: str) -> str:
     """Initiate the pipeline."""
     from clinica.utils.filemanip import get_subject_id
     from clinica.utils.ux import print_begin_image
 
-    image_id = get_subject_id(pet)
+    image_id = get_subject_id(pet_reference)
     print_begin_image(image_id)
-    return pet
+    return pet_reference
 
 
 def concatenate_transforms(
@@ -281,11 +281,11 @@ def _get_pet_bids_components(cropped: bool, region: SUVRReferenceRegion) -> str:
     return f"{space}{desc}{resolution}{suvr}_pet.nii.gz"
 
 
-def print_end_pipeline(pet: str, final_file):
+def print_end_pipeline(pet_target: str, final_file):
     """
     Display end message for <subject_id> when <final_file> is connected.
     """
     from clinica.utils.filemanip import get_subject_id
     from clinica.utils.ux import print_end_image
 
-    print_end_image(get_subject_id(pet))
+    print_end_image(get_subject_id(pet_target))
